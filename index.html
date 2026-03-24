@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PlanMyTrip</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg: '#FDFBF7',
+                        card: '#FFFFFF',
+                        accent: '#E6D5B8',
+                        primary: '#98A886',
+                        text: '#5D534A',
+                        secondary: '#A6998A'
+                    },
+                    borderRadius: {
+                        '4xl': '2rem',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Nunito', 'Noto Sans TC', sans-serif;
+            background-color: #FDFBF7;
+            color: #5D534A;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(10px); }
+
+        .input-locked {
+            background: transparent !important;
+            border: none !important;
+            pointer-events: none;
+            padding-left: 0 !important;
+        }
+
+        /* 修復切換按鈕樣式 */
+        .toggle-dot {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body class="bg-bg text-text h-screen overflow-hidden">
+    <div id="app" class="h-full flex flex-col relative">
+        
+        <!-- 首頁 (專案列表) -->
+        <div v-if="view === 'home'" class="flex-1 overflow-y-auto p-6 relative pb-24">
+            <div class="max-w-4xl mx-auto">
+                <header class="flex justify-between items-center mb-10">
+                    <div>
+                        <h1 class="text-4xl font-black text-text mb-1 flex items-center gap-2">
+                            🌏 <span class="tracking-tight">PlanMyTrip</span>
+                        </h1>
+                        <p class="text-secondary font-bold text-sm ml-10">準備好開始新旅程了嗎？</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button @click="showCalc = true" class="w-12 h-12 bg-white rounded-full shadow-sm border border-accent/50 flex items-center justify-center text-primary hover:scale-105 transition-transform">
+                            <i class="fa-solid fa-calculator text-xl"></i>
+                        </button>
+                        <button @click="createNewProject" class="w-12 h-12 bg-primary text-white rounded-full shadow-md flex items-center justify-center hover:scale-105 transition-transform">
+                            <i class="fa-solid fa-plus text-xl"></i>
+                        </button>
+                    </div>
+                </header>
+
+                <div v-if="projects.length === 0" class="text-center py-20 bg-white/50 rounded-4xl border-2 border-dashed border-accent/30">
+                    <div class="text-6xl mb-4">✈️</div>
+                    <p class="text-secondary font-bold">目前沒有旅遊專案，點擊右上方 + 開始規劃！</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div v-for="p in projects" :key="p.id" @click="openProject(p)" class="bg-card p-6 rounded-4xl shadow-sm border border-accent/30 cursor-pointer hover:shadow-md transition-all relative overflow-hidden group">
+                        <div class="absolute -right-6 -top-6 text-9xl opacity-5 group-hover:opacity-10 transition-opacity select-none">{{ p.icon || '🌏' }}</div>
+                        <div class="relative z-10 flex justify-between items-start mb-4">
+                            <div class="w-14 h-14 bg-accent/30 rounded-2xl flex items-center justify-center text-3xl shadow-inner">
+                                {{ p.icon || '🌏' }}
+                            </div>
+                            <button @click.stop="deleteProject(p.id)" class="text-red-200 hover:text-red-400 transition-colors">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                        <div class="relative z-10">
+                            <h3 class="text-xl font-black mb-1 truncate">{{ p.title }}</h3>
+                            <div class="text-xs font-bold text-secondary mb-4 flex items-center gap-1">
+                                <i class="fa-regular fa-calendar opacity-70"></i> {{ formatDate(p.startDate) }} 出發
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 專案內容頁 -->
+        <div v-else class="flex flex-col h-full bg-bg">
+            <!-- Header -->
+            <header class="bg-white px-4 py-4 border-b border-accent/30 flex items-center gap-3 z-20 shadow-sm sticky top-0">
+                <button @click="view = 'home'" class="w-10 h-10 flex items-center justify-center text-text bg-bg rounded-full active:scale-95 transition-transform">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <div class="flex items-center gap-2 flex-1 bg-bg px-4 py-2 rounded-2xl border border-accent/20">
+                    <input v-model="currentProject.icon" class="w-8 bg-transparent border-none outline-none text-xl text-center" placeholder="🌏">
+                    <input v-model="currentProject.title" class="flex-1 bg-transparent border-none outline-none text-lg font-black text-text" placeholder="專案名稱">
+                </div>
+            </header>
+
+            <!-- Tabs -->
+            <div class="px-4 py-4 bg-bg z-10">
+                <div class="flex bg-accent/20 p-1.5 rounded-3xl max-w-md mx-auto relative shadow-inner">
+                    <div class="absolute inset-y-1.5 w-1/3 bg-white rounded-2xl shadow-sm transition-all duration-300 ease-in-out" 
+                         :style="{ transform: `translateX(${tabIndex * 100}%)`, left: '6px', width: 'calc(33.333% - 8px)' }"></div>
+                    <button @click="activeTab = 'itinerary'" class="flex-1 py-2.5 text-sm font-black z-10 transition-colors" :class="activeTab === 'itinerary' ? 'text-primary' : 'text-secondary'">行程</button>
+                    <button @click="activeTab = 'split'" class="flex-1 py-2.5 text-sm font-black z-10 transition-colors" :class="activeTab === 'split' ? 'text-primary' : 'text-secondary'">記帳</button>
+                    <button @click="activeTab = 'settings'" class="flex-1 py-2.5 text-sm font-black z-10 transition-colors" :class="activeTab === 'settings' ? 'text-primary' : 'text-secondary'">設定</button>
+                </div>
+            </div>
+
+            <main class="flex-1 overflow-y-auto px-4 pb-20 no-scrollbar">
+                
+                <!-- 行程分頁 -->
+                <div v-show="activeTab === 'itinerary'" class="max-w-3xl mx-auto pb-10">
+                    <div class="flex gap-3 overflow-x-auto py-2 no-scrollbar mb-6 items-center">
+                        <button v-for="d in maxDays" :key="d" @click="activeDay = d" 
+                                class="flex-shrink-0 w-16 h-20 rounded-3xl flex flex-col items-center justify-center transition-all duration-300"
+                                :class="activeDay === d ? 'bg-primary text-white shadow-lg transform -translate-y-1' : 'bg-white text-secondary border border-accent/40'">
+                            <span class="text-[10px] font-black opacity-60">Day</span>
+                            <span class="text-2xl font-black">{{ d }}</span>
+                            <span class="text-[10px] font-bold mt-0.5 opacity-80">{{ getDateForDay(d) }}</span>
+                        </button>
+                        <button @click="addDay" class="flex-shrink-0 w-12 h-12 rounded-full border-2 border-dashed border-accent flex items-center justify-center text-accent"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div v-for="item in sortedCurrentDayItinerary" :key="item.id" class="bg-white p-5 rounded-4xl shadow-sm border border-accent/20 relative group transition-all" :class="editingItemId === item.id ? 'ring-2 ring-primary/20 scale-[1.02]' : ''">
+                            
+                            <button @click="toggleEdit(item.id)" class="absolute top-4 right-4 z-10 px-3 py-1.5 rounded-xl text-xs font-black transition-colors" :class="editingItemId === item.id ? 'bg-primary text-white' : 'bg-bg text-secondary border border-accent/30'">
+                                <i class="fa-solid" :class="editingItemId === item.id ? 'fa-check mr-1' : 'fa-pen-to-square mr-1'"></i>
+                                {{ editingItemId === item.id ? '完成' : '修改' }}
+                            </button>
+
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-3">
+                                    <input type="time" v-model="item.time" :class="editingItemId === item.id ? 'bg-bg border-primary/30' : 'input-locked'" class="text-primary font-black rounded-xl px-2 py-1.5 outline-none border w-[140px] text-sm transition-all">
+                                    <input type="text" v-model="item.location" :placeholder="editingItemId === item.id ? '輸入地點' : ''" :class="editingItemId === item.id ? 'bg-bg px-2 border-primary/30' : 'input-locked'" class="flex-1 border-none outline-none font-black text-lg text-text truncate rounded-xl transition-all">
+                                </div>
+                                
+                                <div class="flex items-start gap-2 bg-bg/30 p-2 rounded-2xl">
+                                    <i class="fa-regular fa-comment-dots text-secondary mt-1 ml-1 text-xs"></i>
+                                    <input type="text" v-model="item.note" :placeholder="editingItemId === item.id ? '新增備註' : '無備註'" :class="editingItemId === item.id ? 'bg-white border-primary/20 px-2' : 'input-locked text-secondary/70'" class="flex-1 border outline-none text-sm font-bold rounded-lg transition-all">
+                                </div>
+
+                                <div class="flex flex-wrap gap-2 items-center">
+                                    <div v-for="link in item.links" :key="link.id" class="flex items-center gap-1.5 bg-accent/10 text-primary px-3 py-1.5 rounded-full text-xs font-black border border-accent/30">
+                                        <a :href="formatUrl(link.url)" target="_blank" class="flex items-center gap-1 truncate max-w-[120px] hover:underline">
+                                            <i class="fa-solid fa-link text-[10px]"></i> {{ getDisplayTitle(link) }}
+                                        </a>
+                                        <button v-if="editingItemId === item.id" @click="removeLink(item, link.id)" class="text-red-300 ml-1 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
+                                    </div>
+                                    <button v-if="editingItemId === item.id" @click="openLinkModal(item.id)" class="text-xs font-black text-secondary border border-dashed border-secondary/40 px-3 py-1.5 rounded-full hover:bg-secondary/10 flex items-center gap-1">
+                                        <i class="fa-solid fa-plus text-[10px]"></i> 網址
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button v-if="editingItemId === item.id" @click="removeItineraryItem(item.id)" class="mt-4 w-full py-2 text-xs text-red-400 font-bold border-t border-red-50 border-dashed">
+                                刪除此行程項
+                            </button>
+                        </div>
+                    </div>
+
+                    <button @click="addItineraryItem" class="w-full mt-6 py-5 rounded-4xl border-2 border-dashed border-accent text-secondary font-black flex justify-center items-center gap-2 hover:bg-accent/10 transition-colors">
+                        <i class="fa-solid fa-location-crosshairs"></i> 新增行程至 Day {{ activeDay }}
+                    </button>
+                </div>
+
+                <!-- 記帳分頁 -->
+                <div v-show="activeTab === 'split'" class="max-w-2xl mx-auto space-y-6 pb-10">
+                    <div class="bg-white p-6 rounded-4xl shadow-sm border border-accent/20">
+                        <h3 class="text-sm font-black text-secondary mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-users text-primary"></i> 夥伴清單
+                        </h3>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <div v-for="m in currentProject.members" :key="m" @click="showMemberStats(m)" class="bg-bg border border-accent/50 px-4 py-2 rounded-2xl flex items-center gap-2 font-black text-sm cursor-pointer hover:border-primary transition-colors group">
+                                <i class="fa-solid fa-circle-user text-primary/70"></i> {{ m }}
+                                <button v-if="m !== '我'" @click.stop="removeMember(m)" class="ml-1 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><i class="fa-solid fa-xmark text-xs"></i></button>
+                            </div>
+                            <div class="flex items-center bg-accent/10 rounded-2xl px-3 py-1.5 border border-primary/20">
+                                <input v-model="newMemberName" @keyup.enter="addMember" placeholder="輸入名字..." class="w-20 bg-transparent border-none outline-none text-xs font-bold text-text">
+                                <button @click="addMember" class="text-primary hover:scale-110 transition-transform"><i class="fa-solid fa-plus"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 結算 -->
+                    <div class="bg-primary p-6 rounded-4xl text-white shadow-md">
+                        <h3 class="text-lg font-black mb-4 flex justify-between items-center">
+                            結算明細 (TWD)
+                            <span class="text-[10px] opacity-70 font-normal"></span>
+                        </h3>
+                        <div v-if="settlements.length === 0" class="text-center py-4 text-white/60 text-sm font-bold">
+                            目前無需分帳
+                        </div>
+                        <div class="space-y-2">
+                            <div v-for="(s, idx) in settlements" :key="idx" class="bg-white/10 p-3.5 rounded-2xl flex justify-between items-center border border-white/20">
+                                <div class="font-black text-sm flex items-center gap-2">
+                                    <span class="bg-white/20 px-2 py-0.5 rounded-md">{{ s.from }}</span>
+                                    <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                                    <span class="bg-white/20 px-2 py-0.5 rounded-md">{{ s.to }}</span>
+                                </div>
+                                <div class="font-black text-lg tracking-wider">NT$ {{ Math.round(s.amount).toLocaleString() }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 支出 -->
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-end px-2">
+                            <h3 class="text-lg font-black text-text">消費記錄</h3>
+                            <button @click="addExpense" class="text-primary font-black text-sm bg-primary/10 px-4 py-2 rounded-2xl active:scale-95 transition-transform">新增花費</button>
+                        </div>
+                        <div v-for="exp in currentProject.expenses" :key="exp.id" class="bg-white p-5 rounded-4xl shadow-sm border border-accent/30 space-y-4 relative group">
+                            <div class="flex gap-4">
+                                <div class="flex-1">
+                                    <input type="text" v-model="exp.description" placeholder="花費項目名稱" class="w-full font-black text-lg bg-transparent border-none outline-none">
+                                    <div class="text-sm font-bold text-secondary mt-1 flex items-center gap-2">
+                                        付款：
+                                        <select v-model="exp.payer" class="bg-bg rounded-xl px-2 py-1 outline-none font-black text-primary border border-accent/20 appearance-none cursor-pointer">
+                                            <option v-for="m in currentProject.members" :key="m" :value="m">{{ m }}</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="bg-bg p-3 rounded-3xl text-right min-w-[120px]">
+                                    <div class="flex items-center justify-end gap-1">
+                                        <select v-model="exp.currency" class="bg-transparent border-none outline-none font-black text-xs text-secondary cursor-pointer">
+                                            <option value="TWD">TWD</option>
+                                            <option v-for="c in currentProject.currencies" :key="c.code" :value="c.code">{{ c.code }}</option>
+                                        </select>
+                                        <input type="number" v-model.number="exp.amount" class="w-20 bg-transparent border-none outline-none text-right font-black text-lg text-text" placeholder="0">
+                                    </div>
+                                    <div v-if="exp.currency !== 'TWD'" class="text-[10px] font-black text-primary mt-1">
+                                        ≈ NT$ {{ Math.round(getConvertedAmount(exp)).toLocaleString() }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="pt-3 border-t border-accent/10">
+                                <div class="flex flex-wrap gap-2">
+                                    <button v-for="m in currentProject.members" :key="m" @click="toggleParticipant(exp, m)"
+                                            class="px-3 py-1.5 rounded-xl text-[10px] font-black transition-all"
+                                            :class="exp.participants.includes(m) ? 'bg-primary text-white shadow-sm' : 'bg-bg text-secondary border border-accent/30'">
+                                        {{ m }}
+                                    </button>
+                                </div>
+                            </div>
+                            <button @click="removeExpense(exp.id)" class="absolute -right-2 -top-2 w-7 h-7 bg-white border border-red-50 rounded-full shadow-sm text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 設定分頁 -->
+                <div v-show="activeTab === 'settings'" class="max-w-xl mx-auto space-y-6 pb-10">
+                    <div class="bg-white p-6 rounded-4xl shadow-sm border border-accent/30 space-y-8">
+                        <!-- 日期設定 -->
+                        <div class="space-y-2">
+                            <label class="text-[11px] font-black text-secondary tracking-widest ml-2">出發日期</label>
+                            <div class="bg-bg rounded-3xl p-4 border border-accent/20 flex items-center gap-3">
+                                <i class="fa-regular fa-calendar text-primary"></i>
+                                <input type="date" v-model="currentProject.startDate" class="bg-transparent border-none outline-none font-black text-text w-full">
+                            </div>
+                        </div>
+
+                        <hr class="border-accent/10">
+
+                        <!-- 多幣值設定 -->
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <label class="text-[11px] font-black text-secondary tracking-widest ml-2">幣別與匯率設定</label>
+                                <button @click="addNewCurrency" class="text-xs font-black text-primary bg-primary/10 px-3 py-1 rounded-full active:scale-95 transition-all">
+                                    <i class="fa-solid fa-plus mr-1"></i> 新增幣別
+                                </button>
+                            </div>
+
+                            <div v-if="currentProject.currencies.length === 0" class="text-center py-6 bg-bg/50 rounded-3xl border border-dashed border-accent/40">
+                                <p class="text-xs text-secondary font-bold">尚未新增除 TWD 以外的幣別</p>
+                            </div>
+
+                            <div v-for="(curr, idx) in currentProject.currencies" :key="idx" class="p-5 bg-bg rounded-3xl border border-accent/20 relative group animate-fade">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-8 h-8 bg-white rounded-xl flex items-center justify-center border border-accent/20 shadow-inner">
+                                            <i class="fa-solid fa-coins text-primary text-xs"></i>
+                                        </div>
+                                        <input v-if="curr.auto" :value="curr.code" disabled class="bg-transparent font-black text-text uppercase w-16">
+                                        <input v-else type="text" v-model="curr.code" class="bg-white border border-accent/20 rounded-lg px-2 py-0.5 font-black text-text uppercase w-16 text-sm outline-none focus:border-primary" placeholder="JPY">
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-[10px] font-black text-secondary/80">自動更新匯率</span>
+                                        <button @click="curr.auto = !curr.auto; if(curr.auto) updateAutoRate(curr)" 
+                                                class="w-10 h-5 rounded-full relative transition-all duration-300 flex items-center shadow-inner" 
+                                                :class="curr.auto ? 'bg-primary' : 'bg-secondary/30'">
+                                            <div class="toggle-dot w-3.5 h-3.5 bg-white rounded-full absolute shadow-sm" 
+                                                 :class="curr.auto ? 'left-[22px]' : 'left-0.5'"></div>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-1">
+                                        <label class="text-[9px] font-black text-secondary/70 uppercase ml-1">選擇幣種</label>
+                                        <select v-if="curr.auto" v-model="curr.code" @change="updateAutoRate(curr)" class="w-full bg-white rounded-xl p-2 border border-accent/20 font-black text-sm outline-none">
+                                            <option v-for="(rate, code) in allRates" :key="code" :value="code">{{ code }}</option>
+                                        </select>
+                                        <div v-else class="text-xs font-black text-secondary p-2 bg-white/50 border border-accent/10 rounded-xl">手動輸入代碼</div>
+                                    </div>
+                                    <div class="space-y-1">
+                                        <label class="text-[9px] font-black text-secondary/70 uppercase ml-1">對應 TWD 匯率</label>
+                                        <input type="number" step="0.0001" v-model.number="curr.rate" :readonly="curr.auto" class="w-full rounded-xl p-2 border font-black text-sm outline-none" :class="curr.auto ? 'bg-white/50 border-transparent text-secondary' : 'bg-white border-accent/20 focus:border-primary text-text'">
+                                    </div>
+                                </div>
+                                <button @click="removeCurrency(idx)" class="absolute -right-2 -top-2 w-6 h-6 bg-white border border-red-50 rounded-full shadow-sm text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <i class="fa-solid fa-xmark text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- 匯率計算機 -->
+        <transition name="fade">
+            <div v-if="showCalc" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" @click.self="showCalc = false">
+                <div class="bg-white w-full max-w-md rounded-4xl p-6 shadow-2xl flex flex-col">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-black text-text">匯率計算機</h2>
+                        <button @click="showCalc = false" class="text-secondary/50"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div class="flex gap-2 mb-6">
+                        <input type="number" v-model.number="calcVal" class="w-3/5 bg-bg border border-accent/30 rounded-3xl p-4 text-2xl font-black outline-none" placeholder="金額">
+                        <select v-model="calcCur" class="w-2/5 bg-bg border border-accent/30 rounded-3xl px-3 font-black outline-none">
+                            <option v-for="(rate, curr) in allRates" :key="curr" :value="curr">{{ curr }}</option>
+                        </select>
+                    </div>
+                    <div class="bg-primary p-6 rounded-3xl text-center text-white mb-6">
+                        <div class="text-xs font-bold opacity-80 mb-1">換算台幣 (TWD)</div>
+                        <div class="text-4xl font-black tracking-wider">NT$ {{ Math.round(calcVal * allRates[calcCur]).toLocaleString() }}</div>
+                        <div class="text-[10px] mt-2 opacity-70">當前參考匯率: {{ allRates[calcCur] }}</div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- 個人明細 Modal -->
+        <transition name="fade">
+            <div v-if="statsModal.open" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" @click.self="statsModal.open = false">
+                <div class="bg-white w-full max-w-lg rounded-4xl p-6 shadow-2xl max-h-[85vh] flex flex-col">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-lg font-black text-text">明細: {{ statsModal.member }}</h2>
+                        <button @click="statsModal.open = false" class="text-secondary/50"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3 mb-6">
+                        <div class="bg-primary/5 p-4 rounded-3xl border border-primary/20">
+                            <div class="text-[10px] font-black text-primary uppercase mb-1">已付總額 (代墊)</div>
+                            <div class="text-xl font-black text-primary">NT$ {{ Math.round(statsData.paid).toLocaleString() }}</div>
+                        </div>
+                        <div class="bg-secondary/5 p-4 rounded-3xl border border-accent/30">
+                            <div class="text-[10px] font-black text-secondary uppercase mb-1">應付總額 (開銷)</div>
+                            <div class="text-xl font-black text-text">NT$ {{ Math.round(statsData.cost).toLocaleString() }}</div>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto space-y-3 no-scrollbar pr-1">
+                        <div v-for="item in statsData.history" :key="item.id" class="p-4 bg-bg rounded-2xl border border-accent/20 flex justify-between items-center group">
+                            <div class="flex-1">
+                                <div class="text-sm font-black text-text flex items-center gap-2">
+                                    {{ item.description || '未命名消費' }}
+                                    <span class="text-[9px] bg-accent/20 px-1.5 py-0.5 rounded text-secondary">{{ item.raw }}</span>
+                                </div>
+                                <div class="text-[10px] font-bold text-secondary mt-1 flex gap-3">
+                                    <span v-if="item.isPayer" class="text-primary flex items-center gap-1">
+                                        <i class="fa-solid fa-wallet text-[8px]"></i> 您支付了全額
+                                    </span>
+                                    <span v-if="item.isParticipant" class="text-secondary flex items-center gap-1">
+                                        <i class="fa-solid fa-hand-holding-dollar text-[8px]"></i> 您分擔 NT$ {{ Math.round(item.share).toLocaleString() }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="text-right ml-4">
+                                <div class="text-xs font-black" :class="item.netImpact > 0 ? 'text-primary' : item.netImpact < 0 ? 'text-red-400' : 'text-secondary'">
+                                    {{ item.netImpact > 0 ? '+' : '' }} NT$ {{ Math.round(item.netImpact).toLocaleString() }}
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="statsData.history.length === 0" class="text-center py-10 text-secondary/50 text-xs font-bold">
+                            尚無消費紀錄
+                        </div>
+                    </div>
+
+                    <button @click="statsModal.open = false" class="mt-6 w-full py-3 bg-bg font-black rounded-2xl text-secondary text-sm active:scale-95 transition-transform">關閉明細</button>
+                </div>
+            </div>
+        </transition>
+
+        <!-- 新增網址 Modal -->
+        <transition name="fade">
+            <div v-if="linkModal.open" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" @click.self="linkModal.open = false">
+                <div class="bg-white w-full max-w-sm rounded-4xl p-6 shadow-2xl space-y-4">
+                    <h3 class="text-lg font-black text-text">附加網址</h3>
+                    <input type="text" v-model="linkModal.title" placeholder="顯示名稱" class="w-full bg-bg border border-accent/30 rounded-2xl p-3 font-black outline-none focus:border-primary">
+                    <input type="text" v-model="linkModal.url" placeholder="網址" class="w-full bg-bg border border-accent/30 rounded-2xl p-3 font-black outline-none focus:border-primary">
+                    <div class="flex gap-2">
+                        <button @click="linkModal.open = false" class="flex-1 py-3 text-secondary font-black bg-bg rounded-2xl">取消</button>
+                        <button @click="confirmAddLink" class="flex-1 py-3 bg-primary text-white rounded-2xl font-black">確認</button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+    </div>
+
+    <script>
+        const DEFAULT_RATES = { JPY: 0.21, KRW: 0.024, USD: 32.5, EUR: 35.2, GBP: 41.5, CNY: 4.5, THB: 0.9, HKD: 4.1 };
+
+        const { createApp, ref, computed, watch } = Vue;
+
+        const app = createApp({
+            setup() {
+                const view = ref('home');
+                const activeTab = ref('itinerary');
+                const projects = ref(JSON.parse(localStorage.getItem('pmt_projects_v3')) || []);
+                const customRates = ref(JSON.parse(localStorage.getItem('pmt_rates_v3')) || {});
+                const currentProjectId = ref(null);
+                const activeDay = ref(1);
+                const editingItemId = ref(null);
+                
+                const showCalc = ref(false);
+                const calcVal = ref(100);
+                const calcCur = ref('JPY');
+                const newMemberName = ref('');
+                const statsModal = ref({ open: false, member: '' });
+                const linkModal = ref({ open: false, itemId: null, title: '', url: '' });
+
+                const allRates = computed(() => ({ ...DEFAULT_RATES, ...customRates.value }));
+                const currentProject = computed(() => projects.value.find(p => p.id === currentProjectId.value) || {});
+                
+                // 匯率換算
+                const getConvertedAmount = (exp) => {
+                    if (exp.currency === 'TWD') return exp.amount || 0;
+                    const currObj = currentProject.value.currencies?.find(c => c.code === exp.currency);
+                    const rate = currObj ? currObj.rate : (allRates.value[exp.currency] || 1);
+                    return (exp.amount || 0) * rate;
+                };
+
+                const maxDays = computed(() => {
+                    if (!currentProject.value.itinerary) return 1;
+                    const days = currentProject.value.itinerary.map(i => i.day);
+                    return days.length > 0 ? Math.max(...days) : 1;
+                });
+
+                const sortedCurrentDayItinerary = computed(() => {
+                    if (!currentProject.value.itinerary) return [];
+                    return currentProject.value.itinerary
+                        .filter(i => i.day === activeDay.value)
+                        .sort((a, b) => a.time.localeCompare(b.time));
+                });
+
+                const tabIndex = computed(() => ['itinerary', 'split', 'settings'].indexOf(activeTab.value));
+
+                watch(projects, (newVal) => localStorage.setItem('pmt_projects_v3', JSON.stringify(newVal)), { deep: true });
+
+                const createNewProject = () => {
+                    const np = {
+                        id: Date.now().toString(),
+                        title: '新旅程', icon: '🌏',
+                        startDate: new Date().toISOString().split('T')[0],
+                        currencies: [
+                            { code: 'JPY', rate: 0.21, auto: true }
+                        ],
+                        members: ['我'], itinerary: [], expenses: []
+                    };
+                    projects.value.unshift(np);
+                    openProject(np);
+                };
+
+                const openProject = (p) => {
+                    currentProjectId.value = p.id;
+                    view.value = 'project';
+                    activeTab.value = 'itinerary';
+                    activeDay.value = 1;
+                    editingItemId.value = null;
+                };
+
+                const deleteProject = (id) => {
+                    if (confirm('確定要刪除這個專案嗎？此操作不可恢復。')) {
+                        projects.value = projects.value.filter(p => p.id !== id);
+                    }
+                };
+
+                const formatDate = (dateStr, addDays = 0) => {
+                    const d = new Date(dateStr);
+                    d.setDate(d.getDate() + addDays);
+                    return `${d.getMonth() + 1}/${d.getDate()}`;
+                };
+
+                const getDateForDay = (dayNum) => formatDate(currentProject.value.startDate, dayNum - 1);
+
+                const addItineraryItem = () => {
+                    const id = Date.now().toString();
+                    currentProject.value.itinerary.push({
+                        id, day: activeDay.value, time: '10:00',
+                        location: '', note: '', links: []
+                    });
+                    editingItemId.value = id;
+                };
+
+                const toggleEdit = (id) => {
+                    editingItemId.value = (editingItemId.value === id) ? null : id;
+                };
+
+                const removeItineraryItem = (id) => {
+                    currentProject.value.itinerary = currentProject.value.itinerary.filter(i => i.id !== id);
+                    editingItemId.value = null;
+                };
+
+                const addDay = () => activeDay.value = maxDays.value + 1;
+
+                const openLinkModal = (itemId) => linkModal.value = { open: true, itemId, title: '', url: '' };
+                const confirmAddLink = () => {
+                    if (!linkModal.value.url) return;
+                    const item = currentProject.value.itinerary.find(i => i.id === linkModal.value.itemId);
+                    if (item) item.links.push({ id: Date.now().toString(), title: linkModal.value.title, url: linkModal.value.url });
+                    linkModal.value.open = false;
+                };
+                const removeLink = (item, linkId) => item.links = item.links.filter(l => l.id !== linkId);
+                const formatUrl = (url) => url.startsWith('http') ? url : `https://${url}`;
+                const getDisplayTitle = (link) => {
+                    if (link.title?.trim()) return link.title;
+                    try { return new URL(formatUrl(link.url)).hostname.replace('www.', ''); } catch { return '網址'; }
+                };
+
+                const addMember = () => {
+                    const n = newMemberName.value.trim();
+                    if (n && !currentProject.value.members.includes(n)) currentProject.value.members.push(n);
+                    newMemberName.value = '';
+                };
+                const removeMember = (m) => {
+                    if (confirm(`移除 ${m}？相關分帳將受影響。`)) {
+                        currentProject.value.members = currentProject.value.members.filter(x => x !== m);
+                        // 清理已移除成員在花費中的參與狀態
+                        currentProject.value.expenses.forEach(exp => {
+                            exp.participants = exp.participants.filter(p => p !== m);
+                            if (exp.payer === m) exp.payer = '我';
+                        });
+                    }
+                };
+
+                const addExpense = () => {
+                    currentProject.value.expenses.unshift({
+                        id: Date.now().toString(), description: '', amount: null,
+                        currency: currentProject.value.currencies?.[0]?.code || 'TWD', 
+                        payer: '我',
+                        participants: [...currentProject.value.members]
+                    });
+                };
+                const toggleParticipant = (exp, m) => {
+                    const idx = exp.participants.indexOf(m);
+                    if (idx > -1) exp.participants.splice(idx, 1);
+                    else exp.participants.push(m);
+                };
+                const removeExpense = (id) => currentProject.value.expenses = currentProject.value.expenses.filter(e => e.id !== id);
+
+                // 設定：貨幣管理
+                const addNewCurrency = () => {
+                    if (!currentProject.value.currencies) currentProject.value.currencies = [];
+                    currentProject.value.currencies.push({ code: 'USD', rate: 32.5, auto: true });
+                };
+                const removeCurrency = (idx) => currentProject.value.currencies.splice(idx, 1);
+                const updateAutoRate = (curr) => {
+                    if (curr.auto && allRates.value[curr.code]) {
+                        curr.rate = allRates.value[curr.code];
+                    }
+                };
+
+                const settlements = computed(() => {
+                    if (!currentProject.value.members) return [];
+                    const balances = {};
+                    currentProject.value.members.forEach(m => balances[m] = 0);
+                    currentProject.value.expenses.forEach(exp => {
+                        const amt = getConvertedAmount(exp);
+                        if (exp.participants.length === 0) return;
+                        const share = amt / exp.participants.length;
+                        balances[exp.payer] += amt;
+                        exp.participants.forEach(p => balances[p] -= share);
+                    });
+                    const d = [], c = [], res = [];
+                    Object.keys(balances).forEach(m => {
+                        if (balances[m] < -0.5) d.push({ n: m, a: Math.abs(balances[m]) });
+                        else if (balances[m] > 0.5) c.push({ n: m, a: balances[m] });
+                    });
+                    let di = 0, ci = 0;
+                    while (di < d.length && ci < c.length) {
+                        const a = Math.min(d[di].a, c[ci].a);
+                        res.push({ from: d[di].n, to: c[ci].n, amount: a });
+                        d[di].a -= a; c[ci].a -= a;
+                        if (d[di].a < 0.5) di++; if (c[ci].a < 0.5) ci++;
+                    }
+                    return res;
+                });
+
+                const statsData = computed(() => {
+                    const m = statsModal.value.member;
+                    if (!m) return { paid: 0, cost: 0, history: [] };
+                    let paid = 0, cost = 0;
+                    const history = [];
+
+                    currentProject.value.expenses?.forEach(exp => {
+                        const amt = getConvertedAmount(exp);
+                        if (exp.participants.length === 0) return;
+                        const share = amt / exp.participants.length;
+                        const isPayer = exp.payer === m;
+                        const isParticipant = exp.participants.includes(m);
+
+                        if (isPayer || isParticipant) {
+                            if (isPayer) paid += amt;
+                            if (isParticipant) cost += share;
+
+                            history.push({
+                                id: exp.id,
+                                description: exp.description,
+                                raw: `${exp.amount || 0} ${exp.currency}`,
+                                share: share,
+                                isPayer,
+                                isParticipant,
+                                netImpact: (isPayer ? amt : 0) - (isParticipant ? share : 0)
+                            });
+                        }
+                    });
+
+                    return { paid, cost, history: history.sort((a,b) => b.id - a.id) };
+                });
+
+                return {
+                    view, activeTab, projects, currentProject, activeDay, editingItemId,
+                    showCalc, calcVal, calcCur, newMemberName, statsModal, linkModal,
+                    allRates, maxDays, sortedCurrentDayItinerary, tabIndex, settlements, statsData,
+                    createNewProject, openProject, deleteProject, formatDate, getDateForDay, addDay,
+                    addItineraryItem, toggleEdit, removeItineraryItem, getConvertedAmount,
+                    openLinkModal, confirmAddLink, removeLink, formatUrl, getDisplayTitle,
+                    addMember, removeMember, addExpense, toggleParticipant, removeExpense, 
+                    addNewCurrency, removeCurrency, updateAutoRate,
+                    showMemberStats: (m) => statsModal.value = { open: true, member: m }
+                };
+            }
+        });
+
+        app.mount('#app');
+
+        (function() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 192; canvas.height = 192;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#FDFBF7'; ctx.fillRect(0,0,192,192);
+            ctx.font = '120px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('🌏', 96, 106);
+            const icon = canvas.toDataURL();
+            const l = document.createElement('link'); l.rel='icon'; l.href=icon; document.head.appendChild(l);
+            const m = { name: "PlanMyTrip", short_name: "PlanMyTrip", start_url: ".", display: "standalone", icons: [{ src: icon, sizes: "192x192", type: "image/png" }] };
+            const b = new Blob([JSON.stringify(m)], {type: 'application/json'});
+            const ml = document.createElement('link'); ml.rel='manifest'; ml.href=URL.createObjectURL(b); document.head.appendChild(ml);
+        })();
+    </script>
+</body>
+</html>
