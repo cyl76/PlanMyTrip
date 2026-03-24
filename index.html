@@ -160,7 +160,7 @@
 
                             <div class="space-y-3">
                                 <div class="flex items-center gap-3">
-                                    <input type="time" v-model="item.time" :class="editingItemId === item.id ? 'bg-bg border-primary/30' : 'input-locked'" class="text-primary font-black rounded-xl px-2 py-1.5 outline-none border w-[140px] text-sm transition-all">
+                                    <input type="time" v-model="item.time" :class="editingItemId === item.id ? 'bg-bg border-primary/30' : 'input-locked'" class="text-primary font-black rounded-xl px-2 py-1.5 outline-none border w-[120px] text-sm transition-all">
                                     <input type="text" v-model="item.location" :placeholder="editingItemId === item.id ? '輸入地點' : ''" :class="editingItemId === item.id ? 'bg-bg px-2 border-primary/30' : 'input-locked'" class="flex-1 border-none outline-none font-black text-lg text-text truncate rounded-xl transition-all">
                                 </div>
                                 
