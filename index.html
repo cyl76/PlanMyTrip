@@ -55,7 +55,6 @@
             padding-left: 0 !important;
         }
 
-        /* 修復切換按鈕樣式 */
         .toggle-dot {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
@@ -67,18 +66,28 @@
         <!-- 首頁 (專案列表) -->
         <div v-if="view === 'home'" class="flex-1 overflow-y-auto p-6 relative pb-24">
             <div class="max-w-4xl mx-auto">
-                <header class="flex justify-between items-center mb-10">
+                <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-5">
                     <div>
                         <h1 class="text-4xl font-black text-text mb-1 flex items-center gap-2">
                             🌏 <span class="tracking-tight">PlanMyTrip</span>
                         </h1>
                         <p class="text-secondary font-bold text-sm ml-10">準備好開始新旅程了嗎？</p>
                     </div>
-                    <div class="flex gap-3">
-                        <button @click="showCalc = true" class="w-12 h-12 bg-white rounded-full shadow-sm border border-accent/50 flex items-center justify-center text-primary hover:scale-105 transition-transform">
-                            <i class="fa-solid fa-calculator text-xl"></i>
+                    <!-- 右上角工具列 -->
+                    <div class="flex gap-2 sm:gap-3 items-center self-end sm:self-auto">
+                        <!-- 隱藏的檔案上傳輸入框 -->
+                        <input type="file" ref="fileInput" @change="handleFileUpload" accept=".json" class="hidden">
+                        
+                        <button @click="triggerUpload" title="匯入備份 (還原)" class="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full shadow-sm border border-accent/50 flex items-center justify-center text-secondary hover:text-primary hover:scale-105 transition-transform">
+                            <i class="fa-solid fa-upload text-lg"></i>
                         </button>
-                        <button @click="createNewProject" class="w-12 h-12 bg-primary text-white rounded-full shadow-md flex items-center justify-center hover:scale-105 transition-transform">
+                        <button @click="exportData" title="下載備份 (匯出)" class="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full shadow-sm border border-accent/50 flex items-center justify-center text-secondary hover:text-primary hover:scale-105 transition-transform">
+                            <i class="fa-solid fa-download text-lg"></i>
+                        </button>
+                        <button @click="showCalc = true" title="匯率計算機" class="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-full shadow-sm border border-accent/50 flex items-center justify-center text-primary hover:scale-105 transition-transform">
+                            <i class="fa-solid fa-calculator text-lg"></i>
+                        </button>
+                        <button @click="createNewProject" title="新增計畫" class="w-12 h-12 bg-primary text-white rounded-full shadow-md flex items-center justify-center hover:scale-105 transition-transform sm:ml-1">
                             <i class="fa-solid fa-plus text-xl"></i>
                         </button>
                     </div>
@@ -375,17 +384,17 @@
             <div v-if="statsModal.open" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" @click.self="statsModal.open = false">
                 <div class="bg-white w-full max-w-lg rounded-4xl p-6 shadow-2xl max-h-[85vh] flex flex-col">
                     <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-lg font-black text-text">明細: {{ statsModal.member }}</h2>
+                        <h2 class="text-lg font-black text-text">{{ statsModal.member }}的花費紀錄</h2>
                         <button @click="statsModal.open = false" class="text-secondary/50"><i class="fa-solid fa-xmark"></i></button>
                     </div>
                     
                     <div class="grid grid-cols-2 gap-3 mb-6">
                         <div class="bg-primary/5 p-4 rounded-3xl border border-primary/20">
-                            <div class="text-[10px] font-black text-primary uppercase mb-1">已付總額 (代墊)</div>
+                            <div class="text-[10px] font-black text-primary uppercase mb-1">已付總額</div>
                             <div class="text-xl font-black text-primary">NT$ {{ Math.round(statsData.paid).toLocaleString() }}</div>
                         </div>
                         <div class="bg-secondary/5 p-4 rounded-3xl border border-accent/30">
-                            <div class="text-[10px] font-black text-secondary uppercase mb-1">應付總額 (開銷)</div>
+                            <div class="text-[10px] font-black text-secondary uppercase mb-1">消費總額</div>
                             <div class="text-xl font-black text-text">NT$ {{ Math.round(statsData.cost).toLocaleString() }}</div>
                         </div>
                     </div>
@@ -453,6 +462,7 @@
                 const currentProjectId = ref(null);
                 const activeDay = ref(1);
                 const editingItemId = ref(null);
+                const fileInput = ref(null);
                 
                 const showCalc = ref(false);
                 const calcVal = ref(100);
@@ -489,6 +499,14 @@
 
                 watch(projects, (newVal) => localStorage.setItem('pmt_projects_v3', JSON.stringify(newVal)), { deep: true });
 
+                const openProject = (p, defaultTab = 'itinerary') => {
+                    currentProjectId.value = p.id;
+                    view.value = 'project';
+                    activeTab.value = defaultTab;
+                    activeDay.value = 1;
+                    editingItemId.value = null;
+                };
+
                 const createNewProject = () => {
                     const np = {
                         id: Date.now().toString(),
@@ -500,21 +518,62 @@
                         members: ['我'], itinerary: [], expenses: []
                     };
                     projects.value.unshift(np);
-                    openProject(np);
-                };
-
-                const openProject = (p) => {
-                    currentProjectId.value = p.id;
-                    view.value = 'project';
-                    activeTab.value = 'itinerary';
-                    activeDay.value = 1;
-                    editingItemId.value = null;
+                    // 第一次開啟預設跳至「設定」頁面
+                    openProject(np, 'settings');
                 };
 
                 const deleteProject = (id) => {
                     if (confirm('確定要刪除這個計畫嗎？此操作不可恢復。')) {
                         projects.value = projects.value.filter(p => p.id !== id);
                     }
+                };
+
+                // 備份與還原功能
+                const exportData = () => {
+                    const data = { projects: projects.value, rates: customRates.value };
+                    const dataStr = JSON.stringify(data, null, 2);
+                    const blob = new Blob([dataStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
+                    a.download = `PlanMyTrip_Backup_${date}.json`;
+                    
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                };
+
+                const triggerUpload = () => {
+                    if (fileInput.value) fileInput.value.click();
+                };
+
+                const handleFileUpload = (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const data = JSON.parse(e.target.result);
+                            if (data && typeof data === 'object') {
+                                if (confirm('⚠️ 匯入將會覆蓋當前所有的旅遊計畫資料，確定要繼續嗎？')) {
+                                    if (data.projects) projects.value = data.projects;
+                                    else if (Array.isArray(data)) projects.value = data; 
+                                    if (data.rates) customRates.value = data.rates;
+                                    alert('✅ 資料匯入成功！');
+                                }
+                            } else {
+                                alert('❌ 無效的備份檔案格式。');
+                            }
+                        } catch (err) {
+                            alert('❌ 讀取檔案失敗：' + err.message);
+                        }
+                        event.target.value = ''; // 重置 file input
+                    };
+                    reader.readAsText(file);
                 };
 
                 const formatDate = (dateStr, addDays = 0) => {
@@ -567,7 +626,6 @@
                 const removeMember = (m) => {
                     if (confirm(`移除 ${m}？相關分帳將受影響。`)) {
                         currentProject.value.members = currentProject.value.members.filter(x => x !== m);
-                        // 清理已移除成員在花費中的參與狀態
                         currentProject.value.expenses.forEach(exp => {
                             exp.participants = exp.participants.filter(p => p !== m);
                             if (exp.payer === m) exp.payer = '我';
@@ -590,7 +648,6 @@
                 };
                 const removeExpense = (id) => currentProject.value.expenses = currentProject.value.expenses.filter(e => e.id !== id);
 
-                // 設定：貨幣管理
                 const addNewCurrency = () => {
                     if (!currentProject.value.currencies) currentProject.value.currencies = [];
                     currentProject.value.currencies.push({ code: 'USD', rate: 32.5, auto: true });
@@ -663,8 +720,10 @@
                 return {
                     view, activeTab, projects, currentProject, activeDay, editingItemId,
                     showCalc, calcVal, calcCur, newMemberName, statsModal, linkModal,
+                    fileInput,
                     allRates, maxDays, sortedCurrentDayItinerary, tabIndex, settlements, statsData,
                     createNewProject, openProject, deleteProject, formatDate, getDateForDay, addDay,
+                    exportData, triggerUpload, handleFileUpload,
                     addItineraryItem, toggleEdit, removeItineraryItem, getConvertedAmount,
                     openLinkModal, confirmAddLink, removeLink, formatUrl, getDisplayTitle,
                     addMember, removeMember, addExpense, toggleParticipant, removeExpense, 
