@@ -86,7 +86,7 @@
 
                 <div v-if="projects.length === 0" class="text-center py-20 bg-white/50 rounded-4xl border-2 border-dashed border-accent/30">
                     <div class="text-6xl mb-4">✈️</div>
-                    <p class="text-secondary font-bold">目前沒有旅遊專案，點擊右上方 + 開始規劃！</p>
+                    <p class="text-secondary font-bold">目前沒有旅遊計畫，點擊右上方 + 開始規劃！</p>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -120,7 +120,7 @@
                 </button>
                 <div class="flex items-center gap-2 flex-1 bg-bg px-4 py-2 rounded-2xl border border-accent/20">
                     <input v-model="currentProject.icon" class="w-8 bg-transparent border-none outline-none text-xl text-center" placeholder="🌏">
-                    <input v-model="currentProject.title" class="flex-1 bg-transparent border-none outline-none text-lg font-black text-text" placeholder="專案名稱">
+                    <input v-model="currentProject.title" class="flex-1 bg-transparent border-none outline-none text-lg font-black text-text" placeholder="計畫名稱">
                 </div>
             </header>
 
@@ -512,7 +512,7 @@
                 };
 
                 const deleteProject = (id) => {
-                    if (confirm('確定要刪除這個專案嗎？此操作不可恢復。')) {
+                    if (confirm('確定要刪除這個計畫嗎？此操作不可恢復。')) {
                         projects.value = projects.value.filter(p => p.id !== id);
                     }
                 };
