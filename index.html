@@ -580,11 +580,16 @@
                 };
 
                 const formatDate = (dateStr, addDays = 0) => {
-                    const d = new Date(dateStr);
-                    d.setDate(d.getDate() + addDays);
-                    return `${d.getMonth() + 1}/${d.getDate()}`;
-                };
-
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + addDays);
+    
+    // 定義星期幾的名稱 
+    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+    const dayOfWeek = weekDays[d.getDay()];
+    
+    // 回傳 3/30 (一) 格式 
+    return `${d.getMonth() + 1}/${d.getDate()} (${dayOfWeek})`;
+};
                 const getDateForDay = (dayNum) => formatDate(currentProject.value.startDate, dayNum - 1);
 
                 const addItineraryItem = () => {
