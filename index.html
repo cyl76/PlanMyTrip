@@ -2,9 +2,11 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>旅遊規劃助手 1.2🌏</title>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>PlanMyTrip🌏</title>
+    <meta name="theme-color" content="#FDFBF7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -32,283 +34,352 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&family=Noto+Sans+TC:wght@400;700;900&display=swap');
-        body { font-family: 'Nunito', 'Noto Sans TC', sans-serif; background-color: #FDFBF7; color: #5D534A; overflow-x: hidden; }
+       body {
+    font-family: 'Nunito', 'Noto Sans TC', sans-serif;
+    background-color: #FDFBF7;
+    color: #5D534A;
+    overflow-x: hidden;
+
+    padding-top: env(safe-area-inset-top);
+    background: #FDFBF7;
+}
+    padding-top: env(safe-area-inset-top);
+}
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
         .fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(10px); }
         .input-locked { background: transparent !important; border: none !important; pointer-events: none; padding-left: 0 !important; }
         .toggle-dot { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        
+        /* 列印與 PDF 匯出樣式 */
+        @media print {
+            body { background: white !important; color: black !important; }
+            .print-hidden { display: none !important; }
+            .print-block { display: block !important; }
+            .print-break-avoid { break-inside: avoid; }
+            @page { margin: 1.5cm; }
+        }
     </style>
 </head>
 <body class="bg-bg text-text h-screen overflow-hidden">
     <div id="app" class="h-full flex flex-col relative">
         
-        <!-- 首頁 -->
-        <div v-if="view === 'home'" class="flex-1 overflow-y-auto p-6 relative pb-24">
-            <div class="max-w-4xl mx-auto">
-                <header class="flex justify-between items-center mb-10">
-                    <div>
-                        <h1 class="text-4xl font-black text-text mb-1 flex items-center gap-2">
-                            🌏 <span class="tracking-tight">PlanMyTrip</span>
-                        </h1>
-                        <p class="text-secondary font-bold text-sm ml-10"></p>
-                    </div>
-                    <div class="flex gap-3">
-                        <button @click="showCalc = true" class="w-12 h-12 bg-white rounded-full shadow-sm border border-accent/50 flex items-center justify-center text-primary">
-                            <i class="fa-solid fa-calculator text-xl"></i>
-                        </button>
-                        <button @click="createNewProject" class="w-12 h-12 bg-primary text-white rounded-full shadow-md flex items-center justify-center">
-                            <i class="fa-solid fa-plus text-xl"></i>
-                        </button>
-                    </div>
-                </header>
+        <!-- 列印專用隱藏區塊 (匯出 PDF 用) -->
+        <div class="hidden print-block absolute top-0 left-0 w-full bg-white z-[9999] p-8 text-black" v-if="currentProject.id">
+            <h1 class="text-3xl font-black mb-2">{{ currentProject.icon }} {{ currentProject.title }}</h1>
+            <p class="text-gray-500 mb-8 font-bold border-b pb-4">
+                出發日期：{{ currentProject.startDate }} <br>
+                參與夥伴：{{ currentProject.members?.join(', ') }}
+            </p>
 
-                <div v-if="projects.length === 0" class="text-center py-20 bg-white/50 rounded-4xl border-2 border-dashed border-accent/30">
-                    <div class="text-6xl mb-4">✈️</div>
-                    <p class="text-secondary font-bold">目前沒有旅遊計畫，點擊右上方 + 開始規劃！</p>
+            <div v-if="shareModal.options.itinerary" class="mb-10">
+                <h2 class="text-xl font-black mb-4 flex items-center gap-2 border-l-4 border-primary pl-3">📍 行程規劃</h2>
+                <div v-for="day in sortedDaysList" :key="day" class="mb-6 print-break-avoid">
+                    <h3 class="text-lg font-bold bg-gray-100 py-1.5 px-3 rounded-lg inline-block mb-3">
+                        {{ day === '0' ? '💡 靈感清單 (未定時間)' : `Day ${day} - ${getDateForDay(day)}` }}
+                    </h3>
+                    <ul class="space-y-3 pl-2">
+                        <li v-for="item in groupedItinerary[day]" :key="item.id" class="flex gap-4 border-b border-dashed border-gray-200 pb-2">
+                            <div class="font-black text-gray-700 w-16 pt-0.5">{{ item.time || '--:--' }}</div>
+                            <div class="flex-1">
+                                <div class="font-bold text-lg">{{ item.location }}</div>
+                                <div v-if="item.note" class="text-gray-500 text-sm mt-0.5"><i class="fa-regular fa-comment-dots text-xs"></i> {{ item.note }}</div>
+                                <div v-if="item.links && item.links.length > 0" class="text-blue-500 text-xs mt-1">
+                                    <span v-for="link in item.links" :key="link.id" class="mr-3">🔗 {{ getDisplayTitle(link) }}</span>
+                                </div>
+                            </div>
+                        </li>
+                    </ul>
                 </div>
+            </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div v-for="p in projects" :key="p.id" @click="openProject(p)" class="bg-card p-6 rounded-4xl shadow-sm border border-accent/30 cursor-pointer hover:shadow-md transition-all relative overflow-hidden group">
-                        <div class="absolute -right-6 -top-6 text-9xl opacity-5 select-none">{{ p.icon || '🌏' }}</div>
-                        <div class="relative z-10 flex justify-between items-start mb-4">
-                            <div class="w-14 h-14 bg-accent/30 rounded-2xl flex items-center justify-center text-3xl shadow-inner">
-                                {{ p.icon || '🌏' }}
-                            </div>
-                            <button @click.stop="deleteProject(p.id)" class="text-red-200 hover:text-red-400">
-                                <i class="fa-solid fa-trash-can"></i>
-                            </button>
-                        </div>
-                        <div class="relative z-10">
-                            <h3 class="text-xl font-black mb-1 truncate">{{ p.title }}</h3>
-                            <div class="text-xs font-bold text-secondary flex items-center gap-1">
-                                <i class="fa-regular fa-calendar opacity-70"></i> {{ formatDate(p.startDate) }} 出發
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div v-if="shareModal.options.split" class="print-break-avoid">
+                <h2 class="text-xl font-black mb-4 flex items-center gap-2 border-l-4 border-primary pl-3">💰 結算明細</h2>
+                <div v-if="settlements.length === 0" class="text-gray-500 italic">目前沒有需要分攤的帳務。</div>
+                <ul class="space-y-2">
+                    <li v-for="(s, idx) in settlements" :key="idx" class="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
+                        <div class="font-bold">{{ s.from }} <span class="mx-2 text-gray-400">➡️ 應給</span> {{ s.to }}</div>
+                        <div class="font-black text-lg">NT$ {{ Math.round(s.amount).toLocaleString() }}</div>
+                    </li>
+                </ul>
             </div>
         </div>
 
-        <!-- 專案頁面 -->
-        <div v-else class="flex flex-col h-full bg-bg">
-            <!-- Header -->
-            <header class="bg-white px-4 py-4 border-b border-accent/30 flex items-center gap-3 z-20 shadow-sm sticky top-0">
-                <button @click="view = 'home'" class="w-10 h-10 flex items-center justify-center text-text bg-bg rounded-full active:scale-95 transition-transform">
-                    <i class="fa-solid fa-chevron-left"></i>
-                </button>
-                <div class="flex items-center gap-2 flex-1 bg-bg px-4 py-2 rounded-2xl border border-accent/20">
-                    <input v-model="currentProject.icon" class="w-8 bg-transparent border-none outline-none text-xl text-center" placeholder="🌏">
-                    <input v-model="currentProject.title" class="flex-1 bg-transparent border-none outline-none text-lg font-black text-text" placeholder="專案名稱">
-                </div>
-            </header>
+        <!-- 一般使用者介面 (列印時隱藏) -->
+        <div class="h-full flex flex-col w-full print-hidden">
+            <!-- 首頁 -->
+            <div v-if="view === 'home'" class="flex-1 overflow-y-auto p-6 relative pb-24">
+                <div class="max-w-4xl mx-auto">
+                    <header class="flex justify-between items-center mb-10">
+                        <div>
+                            <h1 class="text-4xl font-black text-text mb-1 flex items-center gap-2">
+                                🌏 <span class="tracking-tight">PlanMyTrip</span>
+                            </h1>
+                            <p class="text-secondary font-bold text-sm ml-10"></p>
+                        </div>
+                        <div class="flex gap-3">
+                            <button @click="showCalc = true" class="w-12 h-12 bg-white rounded-full shadow-sm border border-accent/50 flex items-center justify-center text-primary">
+                                <i class="fa-solid fa-calculator text-xl"></i>
+                            </button>
+                            <button @click="createNewProject" class="w-12 h-12 bg-primary text-white rounded-full shadow-md flex items-center justify-center">
+                                <i class="fa-solid fa-plus text-xl"></i>
+                            </button>
+                        </div>
+                    </header>
 
-            <!-- Tabs -->
-            <div class="px-4 py-4 bg-bg z-10">
-                <div class="flex bg-accent/20 p-1.5 rounded-3xl max-w-md mx-auto relative shadow-inner">
-                    <div class="absolute top-1.5 bottom-1.5 left-1.5 bg-white rounded-2xl shadow-sm transition-transform duration-300" 
-                         :style="{ width: 'calc((100% - 12px) / 3)', transform: `translateX(${tabIndex * 100}%)` }"></div>
-                    <button @click="activeTab = 'itinerary'" class="flex-1 py-2.5 text-sm font-black z-10 transition-colors text-center" :class="activeTab === 'itinerary' ? 'text-primary' : 'text-secondary'">行程</button>
-                    <button @click="activeTab = 'split'" class="flex-1 py-2.5 text-sm font-black z-10 transition-colors text-center" :class="activeTab === 'split' ? 'text-primary' : 'text-secondary'">分帳</button>
-                    <button @click="activeTab = 'settings'" class="flex-1 py-2.5 text-sm font-black z-10 transition-colors text-center" :class="activeTab === 'settings' ? 'text-primary' : 'text-secondary'">設定</button>
+                    <div v-if="projects.length === 0" class="text-center py-20 bg-white/50 rounded-4xl border-2 border-dashed border-accent/30">
+                        <div class="text-6xl mb-4">✈️</div>
+                        <p class="text-secondary font-bold">目前沒有旅遊計畫，點擊右上方 + 開始規劃！</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div v-for="p in projects" :key="p.id" @click="openProject(p)" class="bg-card p-6 rounded-4xl shadow-sm border border-accent/30 cursor-pointer hover:shadow-md transition-all relative overflow-hidden group">
+                            <div class="absolute -right-6 -top-6 text-9xl opacity-5 select-none">{{ p.icon || '🌏' }}</div>
+                            <div class="relative z-10 flex justify-between items-start mb-4">
+                                <div class="w-14 h-14 bg-accent/30 rounded-2xl flex items-center justify-center text-3xl shadow-inner">
+                                    {{ p.icon || '🌏' }}
+                                </div>
+                                <button @click.stop="deleteProject(p.id)" class="text-red-200 hover:text-red-400">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                            <div class="relative z-10">
+                                <h3 class="text-xl font-black mb-1 truncate">{{ p.title }}</h3>
+                                <div class="text-xs font-bold text-secondary flex items-center gap-1">
+                                    <i class="fa-regular fa-calendar opacity-70"></i> {{ formatDate(p.startDate) }} 出發
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <main class="flex-1 overflow-y-auto px-4 pb-20 no-scrollbar">
-                
-                <!-- 行程分頁 -->
-                <div v-show="activeTab === 'itinerary'" class="max-w-3xl mx-auto pb-10">
-                    <div class="flex gap-3 overflow-x-auto py-2 no-scrollbar mb-6 items-center">
-                        <button @click="activeDay = 0" class="flex-shrink-0 w-16 h-20 rounded-3xl flex flex-col items-center justify-center transition-all border"
-                                :class="activeDay === 0 ? 'bg-secondary text-white shadow-lg' : 'bg-white text-secondary border-accent/40'">
-                            <span class="text-[10px] font-black opacity-60">Inbox</span>
-                            <span class="text-2xl font-black">💡</span>
-                            <span class="text-[10px] font-bold mt-0.5 opacity-80">靈感</span>
-                        </button>
-                        
-                        <button v-for="d in maxDays" :key="d" @click="activeDay = d" 
-                                class="flex-shrink-0 w-16 h-20 rounded-3xl flex flex-col items-center justify-center transition-all border"
-                                :class="activeDay === d ? 'bg-primary text-white shadow-lg' : 'bg-white text-secondary border-accent/40'">
-                            <span class="text-[10px] font-black opacity-60">Day</span>
-                            <span class="text-2xl font-black">{{ d }}</span>
-                            <span class="text-[10px] font-bold mt-0.5 opacity-80">{{ getDateForDay(d) }}</span>
-                        </button>
-                        <button @click="addDay" class="flex-shrink-0 w-12 h-12 rounded-full border-2 border-dashed border-accent flex items-center justify-center text-accent"><i class="fa-solid fa-plus"></i></button>
-                    </div>
-
-                    <div v-if="activeDay === 0 && sortedCurrentDayItinerary.length === 0" class="text-center py-10 bg-white/50 rounded-4xl border border-dashed border-accent/30 mb-4">
-                        <p class="text-secondary font-bold text-sm">靈感清單是空的，把想去的地點記在這裡吧！</p>
-                    </div>
-
-                    <div class="space-y-4">
-                        <div v-for="item in sortedCurrentDayItinerary" :key="item.id" class="bg-white p-5 rounded-4xl shadow-sm border border-accent/20 relative group">
-                            <div class="absolute top-4 right-4 z-10 flex gap-2">
-                                <button v-if="editingItemId === item.id" @click="openMoveModal(item)" class="bg-accent/30 text-text px-3 py-1.5 rounded-xl text-xs font-black">
-                                    <i class="fa-solid fa-arrows-up-down-left-right mr-1"></i> 移動
-                                </button>
-                                <button @click="toggleEdit(item.id)" class="px-3 py-1.5 rounded-xl text-xs font-black transition-colors shadow-sm" :class="editingItemId === item.id ? 'bg-primary text-white' : 'bg-bg text-secondary border border-accent/30'">
-                                    <i class="fa-solid" :class="editingItemId === item.id ? 'fa-check mr-1' : 'fa-pen-to-square mr-1'"></i>
-                                    {{ editingItemId === item.id ? '完成' : '修改' }}
-                                </button>
-                            </div>
-
-                            <div class="space-y-3">
-                                <div class="flex items-center gap-3">
-                                    <div v-if="item.day === 0 && editingItemId !== item.id" class="w-[110px] py-1.5 text-secondary/40 italic text-xs font-black">待定時間</div>
-                                    <input v-else type="time" v-model="item.time" :class="editingItemId === item.id ? 'bg-bg border-primary/30' : 'input-locked'" class="text-primary font-black rounded-xl px-2 py-1.5 outline-none border w-[110px] text-sm transition-all">
-                                    <input type="text" v-model="item.location" :placeholder="editingItemId === item.id ? '地點名稱' : ''" :class="editingItemId === item.id ? 'bg-bg px-2 border-primary/30' : 'input-locked'" class="flex-1 border-none outline-none font-black text-lg text-text truncate rounded-xl">
-                                </div>
-                                <div class="flex items-start gap-2 bg-bg/30 p-2 rounded-2xl">
-                                    <i class="fa-regular fa-comment-dots text-secondary mt-1 ml-1 text-xs"></i>
-                                    <input type="text" v-model="item.note" :placeholder="editingItemId === item.id ? '新增備註' : '無備註'" :class="editingItemId === item.id ? 'bg-white border-primary/20 px-2' : 'input-locked text-secondary/70'" class="flex-1 border outline-none text-sm font-bold rounded-lg">
-                                </div>
-                                <div class="flex flex-wrap gap-2 items-center">
-                                    <div v-for="link in item.links" :key="link.id" class="flex items-center gap-1.5 bg-accent/10 text-primary px-3 py-1.5 rounded-full text-xs font-black border border-accent/30">
-                                        <a :href="formatUrl(link.url)" target="_blank" class="flex items-center gap-1 truncate max-w-[120px] hover:underline">
-                                            <i class="fa-solid fa-link text-[10px]"></i> {{ getDisplayTitle(link) }}
-                                        </a>
-                                        <button v-if="editingItemId === item.id" @click="removeLink(item, link.id)" class="text-red-300 ml-1"><i class="fa-solid fa-xmark"></i></button>
-                                    </div>
-                                    <button v-if="editingItemId === item.id" @click="openLinkModal(item.id)" class="text-xs font-black text-secondary border border-dashed border-secondary/40 px-3 py-1.5 rounded-full hover:bg-secondary/10 flex items-center gap-1">
-                                        <i class="fa-solid fa-plus text-[10px]"></i> 網址
-                                    </button>
-                                </div>
-                            </div>
-
-                            <button v-if="editingItemId === item.id" @click="removeItineraryItem(item.id)" class="mt-4 w-full py-2 text-xs text-red-400 font-bold border-t border-red-50 border-dashed">
-                                刪除行程
-                            </button>
-                        </div>
-                    </div>
-
-                    <button @click="addItineraryItem" class="w-full mt-6 py-5 rounded-4xl border-2 border-dashed border-accent text-secondary font-black flex justify-center items-center gap-2 hover:bg-accent/10 transition-colors">
-                        <i class="fa-solid fa-location-crosshairs"></i> 新增至 {{ activeDay === 0 ? '靈感清單' : 'Day ' + activeDay }}
+            <!-- 專案頁面 -->
+            <div v-else class="flex flex-col h-full bg-bg">
+                <!-- Header -->
+                <header class="bg-white px-4 py-4 border-b border-accent/30 flex items-center gap-3 z-20 shadow-sm sticky top-0">
+                    <button @click="view = 'home'" class="w-10 h-10 flex items-center justify-center text-text bg-bg rounded-full active:scale-95 transition-transform">
+                        <i class="fa-solid fa-chevron-left"></i>
                     </button>
+                    <div class="flex items-center gap-2 flex-1 bg-bg px-4 py-2 rounded-2xl border border-accent/20">
+                        <input v-model="currentProject.icon" class="w-8 bg-transparent border-none outline-none text-xl text-center" placeholder="🌏">
+                        <input v-model="currentProject.title" class="flex-1 bg-transparent border-none outline-none text-lg font-black text-text" placeholder="專案名稱">
+                    </div>
+                    <!-- 分享按鈕 -->
+                    <button @click="openShareModal" class="w-10 h-10 flex items-center justify-center text-primary bg-bg rounded-full border border-accent/30 shadow-sm active:scale-95 transition-transform">
+                        <i class="fa-solid fa-share-nodes"></i>
+                    </button>
+                </header>
+
+                <!-- Tabs -->
+                <div class="px-4 py-4 bg-bg z-10">
+                    <div class="flex bg-accent/20 p-1.5 rounded-3xl max-w-md mx-auto relative shadow-inner">
+                        <div class="absolute top-1.5 bottom-1.5 left-1.5 bg-white rounded-2xl shadow-sm transition-transform duration-300" 
+                             :style="{ width: 'calc((100% - 12px) / 3)', transform: `translateX(${tabIndex * 100}%)` }"></div>
+                        <button @click="activeTab = 'itinerary'" class="flex-1 py-2.5 text-sm font-black z-10 transition-colors text-center" :class="activeTab === 'itinerary' ? 'text-primary' : 'text-secondary'">行程</button>
+                        <button @click="activeTab = 'split'" class="flex-1 py-2.5 text-sm font-black z-10 transition-colors text-center" :class="activeTab === 'split' ? 'text-primary' : 'text-secondary'">分帳</button>
+                        <button @click="activeTab = 'settings'" class="flex-1 py-2.5 text-sm font-black z-10 transition-colors text-center" :class="activeTab === 'settings' ? 'text-primary' : 'text-secondary'">設定</button>
+                    </div>
                 </div>
 
-                <!-- 分帳分頁 -->
-                <div v-show="activeTab === 'split'" class="max-w-2xl mx-auto space-y-6 pb-10">
-                    <div class="bg-white p-6 rounded-4xl shadow-sm border border-accent/20">
-                        <h3 class="text-sm font-black text-secondary mb-4 flex items-center gap-2"><i class="fa-solid fa-users text-primary"></i> 夥伴清單</h3>
-                        <div class="flex flex-wrap gap-2 items-center">
-                            <div v-for="m in currentProject.members" :key="m" @click="showMemberStats(m)" class="bg-bg border border-accent/50 px-4 py-2 rounded-2xl flex items-center gap-2 font-black text-sm cursor-pointer group">
-                                <i class="fa-solid fa-circle-user text-primary/70"></i> {{ m }}
-                                <button v-if="m !== '我'" @click.stop="removeMember(m)" class="ml-1 text-red-300 group-hover:opacity-100 opacity-0"><i class="fa-solid fa-xmark text-xs"></i></button>
-                            </div>
-                            <div class="flex items-center bg-accent/10 rounded-2xl px-3 py-1.5 border border-primary/20">
-                                <input v-model="newMemberName" @keyup.enter="addMember" placeholder="新增夥伴" class="w-20 bg-transparent border-none outline-none text-xs font-bold text-text">
-                                <button @click="addMember" class="text-primary"><i class="fa-solid fa-plus"></i></button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="bg-primary p-6 rounded-4xl text-white shadow-md">
-                        <h3 class="text-lg font-black mb-4">分帳明細</h3>
-                        <div v-if="settlements.length === 0" class="text-center py-4 text-white/60 text-sm font-bold">所有帳務已平分</div>
-                        <div class="space-y-2">
-                            <div v-for="(s, idx) in settlements" :key="idx" class="bg-white/10 p-3.5 rounded-2xl flex justify-between items-center border border-white/20">
-                                <div class="font-black text-sm flex items-center gap-2">
-                                    <span class="bg-white/20 px-2 py-0.5 rounded-md">{{ s.from }}</span>
-                                    <i class="fa-solid fa-arrow-right text-[10px]"></i>
-                                    <span class="bg-white/20 px-2 py-0.5 rounded-md">{{ s.to }}</span>
-                                </div>
-                                <div class="font-black text-lg">NT$ {{ Math.round(s.amount).toLocaleString() }}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="space-y-4">
-                        <div class="flex justify-between items-end px-2">
-                            <h3 class="text-lg font-black text-text">消費記錄</h3>
-                            <button @click="addExpense" class="text-primary font-black text-sm bg-primary/10 px-4 py-2 rounded-2xl">新增消費</button>
-                        </div>
-                        <div v-for="exp in currentProject.expenses" :key="exp.id" class="bg-white p-5 rounded-4xl shadow-sm border border-accent/30 space-y-4 relative group">
-                            <div class="flex gap-4">
-                                <div class="flex-1">
-                                    <input type="text" v-model="exp.description" placeholder="消費名稱" class="w-full font-black text-lg bg-transparent border-none outline-none">
-                                    <div class="text-sm font-bold text-secondary mt-1 flex items-center gap-2">
-                                        付款人：
-                                        <select v-model="exp.payer" class="bg-bg rounded-xl px-2 py-1 font-black text-primary border border-accent/20 appearance-none">
-                                            <option v-for="m in currentProject.members" :key="m" :value="m">{{ m }}</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="bg-bg p-3 rounded-3xl text-right min-w-[120px]">
-                                    <div class="flex items-center justify-end gap-1">
-                                        <select v-model="exp.currency" class="bg-transparent border-none outline-none font-black text-xs text-secondary">
-                                            <option value="TWD">TWD</option>
-                                            <option v-for="c in currentProject.currencies" :key="c.code" :value="c.code">{{ c.code }}</option>
-                                        </select>
-                                        <input type="number" v-model.number="exp.amount" class="w-20 bg-transparent border-none outline-none text-right font-black text-lg text-text" placeholder="0">
-                                    </div>
-                                    <div v-if="exp.currency !== 'TWD'" class="text-[10px] font-black text-primary mt-1">≈ NT$ {{ Math.round(getConvertedAmount(exp)).toLocaleString() }}</div>
-                                </div>
-                            </div>
-                            <div class="pt-3 border-t border-accent/10 flex flex-wrap gap-2">
-                                <button v-for="m in currentProject.members" :key="m" @click="toggleParticipant(exp, m)"
-                                        class="px-3 py-1.5 rounded-xl text-[10px] font-black transition-all"
-                                        :class="exp.participants.includes(m) ? 'bg-primary text-white' : 'bg-bg text-secondary border border-accent/30'">
-                                    {{ m }}
-                                </button>
-                            </div>
-                            <button @click="removeExpense(exp.id)" class="absolute -right-2 -top-2 w-7 h-7 bg-white border border-red-50 rounded-full shadow-sm text-red-400 opacity-0 group-hover:opacity-100">
-                                <i class="fa-solid fa-xmark"></i>
+                <main class="flex-1 overflow-y-auto px-4 pb-20 no-scrollbar">
+                    
+                    <!-- 行程分頁 -->
+                    <div v-show="activeTab === 'itinerary'" class="max-w-3xl mx-auto pb-10">
+                        <div class="flex gap-3 overflow-x-auto py-2 no-scrollbar mb-6 items-center">
+                            <button @click="activeDay = 0" class="flex-shrink-0 w-16 h-20 rounded-3xl flex flex-col items-center justify-center transition-all border"
+                                    :class="activeDay === 0 ? 'bg-secondary text-white shadow-lg' : 'bg-white text-secondary border-accent/40'">
+                                <span class="text-[10px] font-black opacity-60">Inbox</span>
+                                <span class="text-2xl font-black">💡</span>
+                                <span class="text-[10px] font-bold mt-0.5 opacity-80">靈感</span>
                             </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 設定分頁 -->
-                <div v-show="activeTab === 'settings'" class="max-w-xl mx-auto space-y-6 pb-10">
-                    <div class="bg-white p-6 rounded-4xl shadow-sm border border-accent/30 space-y-8">
-                        <div class="space-y-2">
-                            <label class="text-[11px] font-black text-secondary tracking-widest ml-2">旅程起始日 (Day 1)</label>
-                            <div class="bg-bg rounded-3xl p-4 border border-accent/20 flex items-center gap-3">
-                                <i class="fa-regular fa-calendar text-primary"></i>
-                                <input type="date" v-model="currentProject.startDate" class="bg-transparent border-none outline-none font-black text-text w-full">
-                            </div>
+                            
+                            <button v-for="d in maxDays" :key="d" @click="activeDay = d" 
+                                    class="flex-shrink-0 w-16 h-20 rounded-3xl flex flex-col items-center justify-center transition-all border"
+                                    :class="activeDay === d ? 'bg-primary text-white shadow-lg' : 'bg-white text-secondary border-accent/40'">
+                                <span class="text-[10px] font-black opacity-60">Day</span>
+                                <span class="text-2xl font-black">{{ d }}</span>
+                                <span class="text-[10px] font-bold mt-0.5 opacity-80">{{ getDateForDay(d) }}</span>
+                            </button>
+                            <button @click="addDay" class="flex-shrink-0 w-12 h-12 rounded-full border-2 border-dashed border-accent flex items-center justify-center text-accent"><i class="fa-solid fa-plus"></i></button>
                         </div>
 
-                        <hr class="border-accent/10">
+                        <div v-if="activeDay === 0 && sortedCurrentDayItinerary.length === 0" class="text-center py-10 bg-white/50 rounded-4xl border border-dashed border-accent/30 mb-4">
+                            <p class="text-secondary font-bold text-sm">靈感清單是空的，把想去的地點記在這裡吧！</p>
+                        </div>
 
                         <div class="space-y-4">
-                            <div class="flex justify-between items-center">
-                                <label class="text-[11px] font-black text-secondary tracking-widest ml-2">幣別設定</label>
-                                <button @click="addNewCurrency" class="text-xs font-black text-primary bg-primary/10 px-3 py-1 rounded-full">新增幣別</button>
-                            </div>
+                            <div v-for="item in sortedCurrentDayItinerary" :key="item.id" class="bg-white p-5 rounded-4xl shadow-sm border border-accent/20 relative group">
+                                <div class="absolute top-4 right-4 z-10 flex gap-2">
+                                    <button v-if="editingItemId === item.id" @click="openMoveModal(item)" class="bg-accent/30 text-text px-3 py-1.5 rounded-xl text-xs font-black">
+                                        <i class="fa-solid fa-arrows-up-down-left-right mr-1"></i> 移動
+                                    </button>
+                                    <button @click="toggleEdit(item.id)" class="px-3 py-1.5 rounded-xl text-xs font-black transition-colors shadow-sm" :class="editingItemId === item.id ? 'bg-primary text-white' : 'bg-bg text-secondary border border-accent/30'">
+                                        <i class="fa-solid" :class="editingItemId === item.id ? 'fa-check mr-1' : 'fa-pen-to-square mr-1'"></i>
+                                        {{ editingItemId === item.id ? '完成' : '修改' }}
+                                    </button>
+                                </div>
 
-                            <div v-for="(curr, idx) in currentProject.currencies" :key="idx" class="p-5 bg-bg rounded-3xl border border-accent/20 relative group">
-                                <div class="flex items-center justify-between mb-4">
-                                    <div class="flex items-center gap-2">
-                                        <select v-model="curr.code" @change="updateAutoRate(curr)" class="bg-white border border-accent/20 rounded-lg px-2 py-0.5 font-black text-text uppercase w-20 text-sm outline-none">
-                                            <option v-for="(rate, code) in allRates" :key="code" :value="code">{{ code }}</option>
-                                        </select>
-                                    </div>
+                                <div class="space-y-3">
                                     <div class="flex items-center gap-3">
-                                        <span class="text-[10px] font-black text-secondary/80">自動更新匯率</span>
-                                        <button @click="curr.auto = !curr.auto; if(curr.auto) updateAutoRate(curr)" 
-                                                class="w-10 h-5 rounded-full relative transition-all border shadow-inner flex items-center" 
-                                                :class="curr.auto ? 'bg-primary' : 'bg-secondary/30'">
-                                            <div class="toggle-dot w-3.5 h-3.5 bg-white rounded-full absolute top-1/2 -translate-y-1/2" :class="curr.auto ? 'left-[22px]' : 'left-[3px]'"></div>
+                                        <div v-if="item.day === 0 && editingItemId !== item.id" class="w-[110px] py-1.5 text-secondary/40 italic text-xs font-black">待定時間</div>
+                                        <input v-else type="time" v-model="item.time" :class="editingItemId === item.id ? 'bg-bg border-primary/30' : 'input-locked'" class="text-primary font-black rounded-xl px-2 py-1.5 outline-none border w-[110px] text-sm transition-all">
+                                        <input type="text" v-model="item.location" :placeholder="editingItemId === item.id ? '地點名稱' : ''" :class="editingItemId === item.id ? 'bg-bg px-2 border-primary/30' : 'input-locked'" class="flex-1 border-none outline-none font-black text-lg text-text truncate rounded-xl">
+                                    </div>
+                                    <div class="flex items-start gap-2 bg-bg/30 p-2 rounded-2xl">
+                                        <i class="fa-regular fa-comment-dots text-secondary mt-1 ml-1 text-xs"></i>
+                                        <input type="text" v-model="item.note" :placeholder="editingItemId === item.id ? '新增備註' : '無備註'" :class="editingItemId === item.id ? 'bg-white border-primary/20 px-2' : 'input-locked text-secondary/70'" class="flex-1 border outline-none text-sm font-bold rounded-lg">
+                                    </div>
+                                    <div class="flex flex-wrap gap-2 items-center">
+                                        <div v-for="link in item.links" :key="link.id" class="flex items-center gap-1.5 bg-accent/10 text-primary px-3 py-1.5 rounded-full text-xs font-black border border-accent/30">
+                                            <a :href="formatUrl(link.url)" target="_blank" class="flex items-center gap-1 truncate max-w-[120px] hover:underline">
+                                                <i class="fa-solid fa-link text-[10px]"></i> {{ getDisplayTitle(link) }}
+                                            </a>
+                                            <button v-if="editingItemId === item.id" @click="removeLink(item, link.id)" class="text-red-300 ml-1"><i class="fa-solid fa-xmark"></i></button>
+                                        </div>
+                                        <button v-if="editingItemId === item.id" @click="openLinkModal(item.id)" class="text-xs font-black text-secondary border border-dashed border-secondary/40 px-3 py-1.5 rounded-full hover:bg-secondary/10 flex items-center gap-1">
+                                            <i class="fa-solid fa-plus text-[10px]"></i> 網址
                                         </button>
                                     </div>
                                 </div>
-                                <div class="space-y-1">
-                                    <label class="text-[9px] font-black text-secondary/70 uppercase ml-1">匯率 (對 TWD)</label>
-                                    <input type="number" step="0.0001" v-model.number="curr.rate" :readonly="curr.auto" class="w-full rounded-xl p-3 border font-black text-sm outline-none" :class="curr.auto ? 'bg-white/50 text-secondary' : 'bg-white text-text focus:border-primary'">
+
+                                <button v-if="editingItemId === item.id" @click="removeItineraryItem(item.id)" class="mt-4 w-full py-2 text-xs text-red-400 font-bold border-t border-red-50 border-dashed">
+                                    刪除行程
+                                </button>
+                            </div>
+                        </div>
+
+                        <button @click="addItineraryItem" class="w-full mt-6 py-5 rounded-4xl border-2 border-dashed border-accent text-secondary font-black flex justify-center items-center gap-2 hover:bg-accent/10 transition-colors">
+                            <i class="fa-solid fa-location-crosshairs"></i> 新增至 {{ activeDay === 0 ? '靈感清單' : 'Day ' + activeDay }}
+                        </button>
+                    </div>
+
+                    <!-- 分帳分頁 -->
+                    <div v-show="activeTab === 'split'" class="max-w-2xl mx-auto space-y-6 pb-10">
+                        <div class="bg-white p-6 rounded-4xl shadow-sm border border-accent/20">
+                            <h3 class="text-sm font-black text-secondary mb-4 flex items-center gap-2"><i class="fa-solid fa-users text-primary"></i> 夥伴清單</h3>
+                            <div class="flex flex-wrap gap-2 items-center">
+                                <div v-for="m in currentProject.members" :key="m" @click="showMemberStats(m)" class="bg-bg border border-accent/50 px-4 py-2 rounded-2xl flex items-center gap-2 font-black text-sm cursor-pointer group">
+                                    <i class="fa-solid fa-circle-user text-primary/70"></i> {{ m }}
+                                    <button v-if="m !== '我'" @click.stop="removeMember(m)" class="ml-1 text-red-300 group-hover:opacity-100 opacity-0"><i class="fa-solid fa-xmark text-xs"></i></button>
                                 </div>
-                                <button @click="removeCurrency(idx)" class="absolute -right-2 -top-2 w-6 h-6 bg-white border border-red-50 rounded-full shadow-sm text-red-300 opacity-0 group-hover:opacity-100">
-                                    <i class="fa-solid fa-xmark text-xs"></i>
+                                <div class="flex items-center bg-accent/10 rounded-2xl px-3 py-1.5 border border-primary/20">
+                                    <input v-model="newMemberName" @keyup.enter="addMember" placeholder="新增夥伴" class="w-20 bg-transparent border-none outline-none text-xs font-bold text-text">
+                                    <button @click="addMember" class="text-primary"><i class="fa-solid fa-plus"></i></button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-primary p-6 rounded-4xl text-white shadow-md">
+                            <h3 class="text-lg font-black mb-4">分帳明細</h3>
+                            <div v-if="settlements.length === 0" class="text-center py-4 text-white/60 text-sm font-bold">所有帳務已平分</div>
+                            <div class="space-y-2">
+                                <div v-for="(s, idx) in settlements" :key="idx" class="bg-white/10 p-3.5 rounded-2xl flex justify-between items-center border border-white/20">
+                                    <div class="font-black text-sm flex items-center gap-2">
+                                        <span class="bg-white/20 px-2 py-0.5 rounded-md">{{ s.from }}</span>
+                                        <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                                        <span class="bg-white/20 px-2 py-0.5 rounded-md">{{ s.to }}</span>
+                                    </div>
+                                    <div class="font-black text-lg">NT$ {{ Math.round(s.amount).toLocaleString() }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-end px-2">
+                                <h3 class="text-lg font-black text-text">消費記錄</h3>
+                                <button @click="addExpense" class="text-primary font-black text-sm bg-primary/10 px-4 py-2 rounded-2xl">新增消費</button>
+                            </div>
+                            <div v-for="exp in currentProject.expenses" :key="exp.id" class="bg-white p-5 rounded-4xl shadow-sm border border-accent/30 space-y-4 relative group">
+                                <div class="flex gap-4">
+                                    <div class="flex-1">
+                                        <input type="text" v-model="exp.description" placeholder="消費名稱" class="w-full font-black text-lg bg-transparent border-none outline-none">
+                                        <div class="text-sm font-bold text-secondary mt-1 flex items-center gap-2">
+                                            付款人：
+                                            <select v-model="exp.payer" class="bg-bg rounded-xl px-2 py-1 font-black text-primary border border-accent/20 appearance-none">
+                                                <option v-for="m in currentProject.members" :key="m" :value="m">{{ m }}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="bg-bg p-3 rounded-3xl text-right min-w-[120px]">
+                                        <div class="flex items-center justify-end gap-1">
+                                            <select v-model="exp.currency" class="bg-transparent border-none outline-none font-black text-xs text-secondary">
+                                                <option value="TWD">TWD</option>
+                                                <option v-for="c in currentProject.currencies" :key="c.code" :value="c.code">{{ c.code }}</option>
+                                            </select>
+                                            <input type="number" v-model.number="exp.amount" class="w-20 bg-transparent border-none outline-none text-right font-black text-lg text-text" placeholder="0">
+                                        </div>
+                                        <div v-if="exp.currency !== 'TWD'" class="text-[10px] font-black text-primary mt-1">≈ NT$ {{ Math.round(getConvertedAmount(exp)).toLocaleString() }}</div>
+                                    </div>
+                                </div>
+                                <div class="pt-3 border-t border-accent/10 flex flex-wrap gap-2">
+                                    <button v-for="m in currentProject.members" :key="m" @click="toggleParticipant(exp, m)"
+                                            class="px-3 py-1.5 rounded-xl text-[10px] font-black transition-all"
+                                            :class="exp.participants.includes(m) ? 'bg-primary text-white' : 'bg-bg text-secondary border border-accent/30'">
+                                        {{ m }}
+                                    </button>
+                                </div>
+                                <button @click="removeExpense(exp.id)" class="absolute -right-2 -top-2 w-7 h-7 bg-white border border-red-50 rounded-full shadow-sm text-red-400 opacity-0 group-hover:opacity-100">
+                                    <i class="fa-solid fa-xmark"></i>
                                 </button>
                             </div>
                         </div>
                     </div>
-                </div>
-            </main>
+
+                    <!-- 設定分頁 -->
+                    <div v-show="activeTab === 'settings'" class="max-w-xl mx-auto space-y-6 pb-10">
+                        <div class="bg-white p-6 rounded-4xl shadow-sm border border-accent/30 space-y-8">
+                            <div class="space-y-2">
+                                <label class="text-[11px] font-black text-secondary tracking-widest ml-2">旅程起始日 (Day 1)</label>
+                                <div class="bg-bg rounded-3xl p-4 border border-accent/20 flex items-center gap-3">
+                                    <i class="fa-regular fa-calendar text-primary"></i>
+                                    <input type="date" v-model="currentProject.startDate" class="bg-transparent border-none outline-none font-black text-text w-full">
+                                </div>
+                            </div>
+
+                            <hr class="border-accent/10">
+
+                            <div class="space-y-4">
+                                <div class="flex justify-between items-center">
+                                    <label class="text-[11px] font-black text-secondary tracking-widest ml-2">幣別設定</label>
+                                    <button @click="addNewCurrency" class="text-xs font-black text-primary bg-primary/10 px-3 py-1 rounded-full">新增幣別</button>
+                                </div>
+
+                                <div v-for="(curr, idx) in currentProject.currencies" :key="idx" class="p-5 bg-bg rounded-3xl border border-accent/20 relative group">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <div class="flex items-center gap-2">
+                                            <select v-model="curr.code" @change="updateAutoRate(curr)" class="bg-white border border-accent/20 rounded-lg px-2 py-0.5 font-black text-text uppercase w-20 text-sm outline-none">
+                                                <option v-for="(rate, code) in allRates" :key="code" :value="code">{{ code }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="flex items-center gap-3">
+                                            <span class="text-[10px] font-black text-secondary/80">自動更新匯率</span>
+                                            <button @click="curr.auto = !curr.auto; if(curr.auto) updateAutoRate(curr)" 
+                                                    class="w-10 h-5 rounded-full relative transition-all border shadow-inner flex items-center" 
+                                                    :class="curr.auto ? 'bg-primary' : 'bg-secondary/30'">
+                                                <div class="toggle-dot w-3.5 h-3.5 bg-white rounded-full absolute top-1/2 -translate-y-1/2" :class="curr.auto ? 'left-[22px]' : 'left-[3px]'"></div>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="space-y-1">
+                                        <label class="text-[9px] font-black text-secondary/70 uppercase ml-1">匯率 (對 TWD)</label>
+                                        <input type="number" step="0.0001" v-model.number="curr.rate" :readonly="curr.auto" class="w-full rounded-xl p-3 border font-black text-sm outline-none" :class="curr.auto ? 'bg-white/50 text-secondary' : 'bg-white text-text focus:border-primary'">
+                                    </div>
+                                    <button @click="removeCurrency(idx)" class="absolute -right-2 -top-2 w-6 h-6 bg-white border border-red-50 rounded-full shadow-sm text-red-300 opacity-0 group-hover:opacity-100">
+                                        <i class="fa-solid fa-xmark text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
         </div>
 
-        <!-- 匯率計算機 -->
+        <!-- 模態視窗區域 (包含計算機、選項 Modal 等等) -->
+        <div class="print-hidden">
+            <!-- 匯率計算機 -->
         <transition name="fade">
             <div v-if="showCalc" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" @click.self="showCalc = false">
                 <div class="bg-white w-full max-w-md rounded-4xl p-6 shadow-2xl">
@@ -331,7 +402,7 @@
             </div>
         </transition>
 
-        <!-- 移動行程 Modal -->
+           <!-- 移動行程 Modal -->
         <transition name="fade">
             <div v-if="moveModal.open" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm" @click.self="moveModal.open = false">
                 <div class="bg-white w-full max-w-md rounded-t-4xl sm:rounded-4xl p-8 shadow-2xl space-y-6">
@@ -403,6 +474,47 @@
                 </div>
             </div>
         </transition>
+            
+            <!-- 分享與匯出 Modal (新增) -->
+            <transition name="fade">
+                <div v-if="shareModal.open" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" @click.self="shareModal.open = false">
+                    <div class="bg-white w-full max-w-sm rounded-4xl p-8 shadow-2xl space-y-6">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-xl font-black text-text"><i class="fa-solid fa-share-nodes text-primary mr-2"></i>分享與匯出</h3>
+                            <button @click="shareModal.open = false" class="text-secondary/50 hover:text-text"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        
+                        <div class="space-y-3 bg-bg p-4 rounded-2xl border border-accent/30">
+                            <p class="text-xs font-black text-secondary mb-2">選擇要包含的資訊：</p>
+                            <label class="flex items-center gap-3 cursor-pointer group">
+                                <input type="checkbox" v-model="shareModal.options.itinerary" class="w-5 h-5 accent-primary cursor-pointer">
+                                <span class="font-bold text-text group-hover:text-primary transition-colors">📍 旅遊行程</span>
+                            </label>
+                            <label class="flex items-center gap-3 cursor-pointer group">
+                                <input type="checkbox" v-model="shareModal.options.split" class="w-5 h-5 accent-primary cursor-pointer">
+                                <span class="font-bold text-text group-hover:text-primary transition-colors">💰 分帳明細</span>
+                            </label>
+                        </div>
+
+                        <div v-if="shareModal.statusMsg" class="text-xs text-center font-bold text-primary bg-primary/10 py-2 rounded-xl">
+                            {{ shareModal.statusMsg }}
+                        </div>
+
+                        <div class="grid grid-cols-1 gap-3">
+                            <button @click="generateAndCopyLink" class="w-full py-3.5 bg-primary text-white rounded-2xl font-black flex justify-center items-center gap-2 hover:bg-primary/90 transition-colors shadow-md">
+                                <i class="fa-solid fa-link"></i> 複製分享網址
+                            </button>
+                            <button @click="generateAndCopyText" class="w-full py-3.5 bg-white border border-primary/40 text-primary rounded-2xl font-black flex justify-center items-center gap-2 hover:bg-primary/5 transition-colors">
+                                <i class="fa-regular fa-copy"></i> 複製純文字版
+                            </button>
+                            <button @click="exportToPdf" class="w-full py-3.5 bg-bg border border-accent/40 text-text rounded-2xl font-black flex justify-center items-center gap-2 hover:bg-accent/20 transition-colors">
+                                <i class="fa-regular fa-file-pdf"></i> 匯出 PDF (列印)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+        </div>
 
     </div>
 
@@ -414,7 +526,7 @@
             setup() {
                 const view = ref('home');
                 const activeTab = ref('itinerary');
-                const projects = ref(JSON.parse(localStorage.getItem('pmt_projects_v1.2')) || []);
+                const projects = ref(JSON.parse(localStorage.getItem('pmt_projects_v1.3')) || []);
                 const systemRates = ref({ ...DEFAULT_RATES });
                 const currentProjectId = ref(null);
                 const activeDay = ref(1);
@@ -427,6 +539,13 @@
                 const statsModal = ref({ open: false, member: '' });
                 const linkModal = ref({ open: false, itemId: null, title: '', url: '' });
                 const moveModal = ref({ open: false, item: null });
+                
+                // 新增：分享 Modal 狀態
+                const shareModal = ref({ 
+                    open: false, 
+                    options: { itinerary: true, split: true },
+                    statusMsg: ''
+                });
 
                 const allRates = computed(() => systemRates.value);
                 const currentProject = computed(() => projects.value.find(p => p.id === currentProjectId.value) || {});
@@ -450,9 +569,28 @@
                         .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
                 });
 
+                // 新增：用於列印與純文字輸出的所有行程資料分組
+                const groupedItinerary = computed(() => {
+                    if (!currentProject.value.itinerary) return {};
+                    const grouped = {};
+                    currentProject.value.itinerary.forEach(item => {
+                        if (!grouped[item.day]) grouped[item.day] = [];
+                        grouped[item.day].push(item);
+                    });
+                    Object.keys(grouped).forEach(day => {
+                        grouped[day].sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+                    });
+                    return grouped;
+                });
+
+                // 排序天數 (0 放最前面或最後面皆可，這裡讓 0 放最前)
+                const sortedDaysList = computed(() => {
+                    return Object.keys(groupedItinerary.value).sort((a, b) => Number(a) - Number(b));
+                });
+
                 const tabIndex = computed(() => ['itinerary', 'split', 'settings'].indexOf(activeTab.value));
 
-                watch(projects, (newVal) => localStorage.setItem('pmt_projects_v1.2', JSON.stringify(newVal)), { deep: true });
+                watch(projects, (newVal) => localStorage.setItem('pmt_projects_v1.3', JSON.stringify(newVal)), { deep: true });
 
                 const createNewProject = () => {
                     const np = {
@@ -463,7 +601,6 @@
                         members: ['我'], itinerary: [], expenses: []
                     };
                     projects.value.unshift(np);
-                    // 新行程進入「設定」分頁
                     openProject(np, true);
                 };
 
@@ -477,44 +614,34 @@
                         activeDay.value = 1;
                     } else {
                         activeTab.value = 'itinerary';
-                        // 計算當前應該在 Day 幾
                         activeDay.value = calculateCurrentDay(p.startDate);
                     }
                 };
 
                 const calculateCurrentDay = (startDateStr) => {
                     if (!startDateStr) return 1;
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const start = new Date(startDateStr);
-                    start.setHours(0, 0, 0, 0);
-                    
-                    const diffTime = today - start;
-                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                    
-                    // 如果今天在出發前，顯示 Day 1
+                    const today = new Date(); today.setHours(0, 0, 0, 0);
+                    const start = new Date(startDateStr); start.setHours(0, 0, 0, 0);
+                    const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24)) + 1;
                     if (diffDays < 1) return 1;
-                    
-                    // 檢查總天數，如果不超過現有的最大天數，顯示計算出的天數
                     const existingMax = maxDays.value;
                     return diffDays > existingMax ? existingMax : diffDays;
                 };
 
                 const deleteProject = (id) => { if (confirm('確定刪除這個行程嗎？')) projects.value = projects.value.filter(p => p.id !== id); };
                 const formatDate = (dateStr, addDays = 0) => {
-                    const d = new Date(dateStr);
-                    d.setDate(d.getDate() + addDays);
+                    const d = new Date(dateStr); d.setDate(d.getDate() + addDays);
                     return `${d.getMonth() + 1}/${d.getDate()}`;
                 };
                 const getDateForDay = (dayNum) => formatDate(currentProject.value.startDate, dayNum - 1);
                 const addDay = () => activeDay.value = maxDays.value + 1;
 
+                // --- 保持原有的各項 CRUD 函數 (addItineraryItem, addMember...) ---
                 const addItineraryItem = () => {
                     const id = Date.now().toString();
                     currentProject.value.itinerary.push({ id, day: activeDay.value, time: activeDay.value === 0 ? '' : '12:00', location: '', note: '', links: [] });
                     editingItemId.value = id;
                 };
-
                 const toggleEdit = (id) => editingItemId.value = (editingItemId.value === id) ? null : id;
                 const removeItineraryItem = (id) => { currentProject.value.itinerary = currentProject.value.itinerary.filter(i => i.id !== id); editingItemId.value = null; };
                 const openMoveModal = (item) => moveModal.value = { open: true, item };
@@ -566,8 +693,7 @@
                 const addNewCurrency = () => {
                     if (!currentProject.value.currencies) currentProject.value.currencies = [];
                     const defaultCode = 'USD';
-                    const initialRate = allRates.value[defaultCode] || 32.5;
-                    currentProject.value.currencies.push({ code: defaultCode, rate: initialRate, auto: true });
+                    currentProject.value.currencies.push({ code: defaultCode, rate: allRates.value[defaultCode] || 32.5, auto: true });
                 };
                 const removeCurrency = (idx) => currentProject.value.currencies.splice(idx, 1);
                 const updateAutoRate = (curr) => { if (curr.auto && allRates.value[curr.code]) curr.rate = allRates.value[curr.code]; };
@@ -614,6 +740,124 @@
                     return { paid, cost, history: history.sort((a,b) => b.id - a.id) };
                 });
 
+                // ================= 分享與匯出功能邏輯 =================
+                
+                const openShareModal = () => {
+                    shareModal.value.open = true;
+                    shareModal.value.statusMsg = '';
+                };
+
+                // 複製到剪貼簿的輔助函數
+                const copyToClipboard = (text, successMsg) => {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        shareModal.value.statusMsg = successMsg || '已複製到剪貼簿！';
+                        setTimeout(() => shareModal.value.statusMsg = '', 3000);
+                    } catch (err) {
+                        shareModal.value.statusMsg = '複製失敗，請手動複製';
+                    }
+                    document.body.removeChild(textArea);
+                };
+
+                // 取得準備要分享的資料包
+                const getExportData = () => {
+                    const data = JSON.parse(JSON.stringify(currentProject.value)); // 深拷貝
+                    if (!shareModal.value.options.itinerary) data.itinerary = [];
+                    if (!shareModal.value.options.split) data.expenses = [];
+                    
+                    // 為了避免匯入時覆蓋自己的專案，重新賦予 ID
+                    data.id = Date.now().toString() + Math.floor(Math.random() * 1000);
+                    data.title = data.title + ' (分享版)';
+                    return data;
+                };
+
+                // 產生分享網址
+                const generateAndCopyLink = () => {
+                    const data = getExportData();
+                    try {
+                        // 將 JSON 轉為 Base64 (支援中文)
+                        const encodedData = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('share', encodedData);
+                        copyToClipboard(url.toString(), '✅ 分享網址已複製！快貼給朋友吧。');
+                    } catch (e) {
+                        shareModal.value.statusMsg = '資料過大，請嘗試使用「純文字」分享。';
+                    }
+                };
+
+                // 產生純文字版
+                const generateAndCopyText = () => {
+                    let text = `🌏 ${currentProject.value.title} (出發日: ${currentProject.value.startDate})\n`;
+                    text += `------------------------\n`;
+
+                    if (shareModal.value.options.itinerary) {
+                        text += `📍 行程安排：\n`;
+                        const sortedDays = sortedDaysList.value;
+                        if(sortedDays.length === 0) text += `(尚無行程)\n`;
+
+                        sortedDays.forEach(day => {
+                            text += `\n【${day === '0' ? '💡 靈感清單' : 'Day ' + day + ' - ' + getDateForDay(day)}】\n`;
+                            groupedItinerary.value[day].forEach(item => {
+                                text += `${item.time || '--:--'} ${item.location}`;
+                                if (item.note) text += ` (${item.note})`;
+                                text += `\n`;
+                            });
+                        });
+                        text += `------------------------\n`;
+                    }
+
+                    if (shareModal.value.options.split) {
+                        text += `💰 分帳明細：\n`;
+                        if (settlements.value.length === 0) {
+                            text += `(目前所有帳務已平分)\n`;
+                        } else {
+                            settlements.value.forEach(s => {
+                                text += `${s.from} ➡️ 應給 ${s.to} : NT$ ${Math.round(s.amount).toLocaleString()}\n`;
+                            });
+                        }
+                        text += `------------------------\n`;
+                    }
+                    
+                    text += `Generated by PlanMyTrip`;
+                    copyToClipboard(text, '✅ 純文字版已複製！可直接貼上至 Line/Messenger。');
+                };
+
+                // 匯出 PDF (呼叫列印)
+                const exportToPdf = () => {
+                    shareModal.value.open = false;
+                    setTimeout(() => {
+                        window.print();
+                    }, 300); // 等待 Modal 關閉動畫結束
+                };
+
+                // 檢查是否帶有分享連結並匯入
+                const checkShareLink = () => {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const shareDataStr = urlParams.get('share');
+                    if (shareDataStr) {
+                        try {
+                            const decodedData = JSON.parse(decodeURIComponent(escape(atob(shareDataStr))));
+                            if (decodedData && decodedData.title) {
+                                if (confirm(`您收到了一個分享的旅遊計畫：「${decodedData.title}」\n請問要匯入並開啟嗎？`)) {
+                                    projects.value.unshift(decodedData);
+                                    openProject(decodedData);
+                                }
+                            }
+                        } catch (e) {
+                            alert('分享連結無效或已損壞。');
+                        } finally {
+                            // 清除 URL 上的 share 參數，避免重整時重複跳出
+                            const url = new URL(window.location.href);
+                            url.searchParams.delete('share');
+                            window.history.replaceState({}, '', url);
+                        }
+                    }
+                };
+
                 const fetchLiveRates = async () => {
                     try {
                         const res = await fetch('https://open.er-api.com/v6/latest/TWD');
@@ -627,18 +871,23 @@
                     } catch (e) { console.warn('無法更新匯率', e); }
                 };
 
-                onMounted(fetchLiveRates);
+                onMounted(() => {
+                    fetchLiveRates();
+                    checkShareLink(); // 初始化時檢查是否有分享連結
+                });
 
                 return {
                     view, activeTab, projects, currentProject, activeDay, editingItemId,
                     showCalc, calcVal, calcCur, newMemberName, statsModal, linkModal, moveModal,
+                    shareModal, groupedItinerary, sortedDaysList, // 新增供 Template 使用
                     allRates, maxDays, sortedCurrentDayItinerary, tabIndex, settlements, statsData,
                     createNewProject, openProject, deleteProject, formatDate, getDateForDay, addDay,
                     addItineraryItem, toggleEdit, removeItineraryItem, getConvertedAmount,
                     openLinkModal, confirmAddLink, removeLink, formatUrl, getDisplayTitle,
                     addMember, removeMember, addExpense, toggleParticipant, removeExpense, 
                     addNewCurrency, removeCurrency, updateAutoRate, openMoveModal, confirmMove,
-                    showMemberStats: (m) => statsModal.value = { open: true, member: m }
+                    showMemberStats: (m) => statsModal.value = { open: true, member: m },
+                    openShareModal, generateAndCopyLink, generateAndCopyText, exportToPdf // 分享相關方法
                 };
             }
         });
